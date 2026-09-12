@@ -1,0 +1,33 @@
+{
+  "uptime": {"days": 0, "hours": 9, "minutes": 41, "seconds": 41},
+  "time": 1789162596,
+  "daylight_savings_time_active": false,
+  "memory": {"disk": {"free": 589774848, "total": 616800256}, "ram": {"free": 249065472, "total": 848060416}},
+  "license": {"users": 200000, "device": 0, "type": 0},
+  "biometrics": {"max_num_records": 10000, "max_possible_num_records": 50000},
+  "network": {
+    "mac": "AA:BB:CC:DD:EE:FF",
+    "ip": "192.0.2.10",
+    "netmask": "255.255.252.0",
+    "gateway": "192.0.2.1",
+    "primary_dns": "192.0.2.1",
+    "secondary_dns": "",
+    "custom_hostname_enabled": false,
+    "device_hostname": "TEST-DEVICE",
+    "web_server_port": 80,
+    "ssl_enabled": false,
+    "self_signed_certificate": true,
+    "dhcp_enabled": true,
+    "ten_mbps": false
+  },
+  "auth802_1x": {"enabled": false, "login": "", "eap_auth": 3, "inner_auth": 3, "has_certificate": false, "has_tls_private_key": false, "has_tls_certificate": false, "uses_certificate": false},
+  "serial": "TEST0000/000000",
+  "version": "2.4.5",
+  "device_id": "00000000000000000",
+  "secbox_version": "2.2.3",
+  "iDCloud_code": "00000000",
+  "online": false,
+  "online_available": true,
+  "device_name": "Amico",
+  "device_two_names": "Amico 7"
+}

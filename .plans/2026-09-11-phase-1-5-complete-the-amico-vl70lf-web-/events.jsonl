@@ -1,0 +1,17 @@
+{"type":"triaged","at":"2026-09-11T15:12:03Z","detail":"feature"}
+{"type":"state_changed","at":"2026-09-11T15:13:53Z","detail":"NEEDS_SPEC_APPROVAL"}
+{"type":"spec_approved","at":"2026-09-11T15:16:05Z","detail":"user (chat: 'Approve the spec, proceed with P0')"}
+{"type":"state_changed","at":"2026-09-11T15:16:05Z","detail":"SPEC_APPROVED"}
+{"type":"state_changed","at":"2026-09-11T15:17:29Z","detail":"PLANNED"}
+{"at":"2026-09-11T15:17:34Z","context_manifest":"context-manifest-plan-reviewer.yaml","role":"plan-reviewer","state":"PLANNED","type":"role_activated"}
+{"type":"reviewed","at":"2026-09-11T15:17:50Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-11T15:17:50Z","detail":"REVIEWED"}
+{"type":"state_changed","at":"2026-09-11T15:17:58Z","detail":"APPROVED"}
+{"at":"2026-09-11T15:17:58Z","context_manifest":"context-manifest-executor.yaml","role":"executor","state":"APPROVED","type":"role_activated"}
+{"type":"verified","at":"2026-09-11T15:20:10Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-11T15:20:40Z","detail":"EXECUTING"}
+{"type":"state_changed","at":"2026-09-11T15:20:52Z","detail":"VERIFYING"}
+{"type":"verified","at":"2026-09-11T15:20:52Z","detail":"PASS"}
+{"at":"2026-09-11T15:20:59Z","context_manifest":"context-manifest-verifier.yaml","role":"verifier","state":"VERIFYING","type":"role_activated"}
+{"type":"role_verification_recorded","at":"2026-09-11T15:21:29Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-11T15:21:29Z","detail":"COMPLETED"}

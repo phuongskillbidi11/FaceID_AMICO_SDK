@@ -1,0 +1,20 @@
+.agent/logs/
+
+# C++ build artifacts
+build/
+out/
+vcpkg_installed/
+CMakeUserPresets.json
+
+# Raw traffic captures — device evidence stays local; only sanitized
+# markdown/json summaries under docs/ and artifacts/ are tracked. See
+# captures/README.md and docs/security-sanitization-policy.md.
+*.pcap
+*.pcapng
+*.har
+*.saz
+
+build-exec/
+build-verify/
+build-verifier/
+.vs/

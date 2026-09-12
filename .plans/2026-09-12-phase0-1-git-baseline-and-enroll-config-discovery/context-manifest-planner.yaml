@@ -1,0 +1,8 @@
+role: planner
+plan: 2026-09-12-phase0-1-git-baseline-and-enroll-config-discovery
+generated_at: 2026-09-12T09:02:03Z
+request: "Giai đoạn 0+1: git baseline commit cho SDK hiện có + discovery bổ sung cho Enroll page và các API config/relay còn thiếu"
+project_sections:
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+tools:

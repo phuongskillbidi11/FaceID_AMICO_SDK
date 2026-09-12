@@ -1,0 +1,221 @@
+{
+  "session": {
+    "date": "2026-09-11",
+    "plan": ".plans/2026-09-11-p1-read-only-browser-mcp-discovery-pass-",
+    "credential_reused_from_phase1": true,
+    "write_actions_invoked": 0
+  },
+  "platform_finding": {
+    "dispatcher": "MessengerUtil.send(command, data) -> POST /<command>.fcgi",
+    "source_file": "configurations.html page script (artifacts/live_capture/configurations_js.network-response)",
+    "messenger_commands_file": "artifacts/live_capture/messenger_commands.json",
+    "messenger_command_count": 78
+  },
+  "actions": [
+    {
+      "page": "users.html",
+      "control": "user listing table",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "users",
+      "request_shape": "{join:LEFT, object:users, fields:[id,name,registration,password,salt,begin_time,end_time,user_type_id,last_access], where:[user_type_id=0 OR user_type_id IS NULL], order:[name], offset, limit, finish:true}",
+      "response_shape": "{users:[{id,name,registration,password,salt,begin_time,end_time,user_type_id,last_access}]}",
+      "read_write": "read",
+      "notes": "password/salt present in response; SDK must drop them."
+    },
+    {
+      "page": "users.html",
+      "control": "search box",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "users",
+      "request_shape": "adds where clause {field:name, value:'%<query>%', connector:') AND ('} ahead of the default filter",
+      "response_shape": "same as default listing, filtered",
+      "read_write": "read",
+      "notes": "LIKE-style wildcard built client-side from raw search text."
+    },
+    {
+      "page": "users.html",
+      "control": "per-page dropdown (10/20/30)",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "users",
+      "request_shape": "same as default listing with limit set to the selected value",
+      "response_shape": "same as default listing",
+      "read_write": "read",
+      "notes": "Confirmed limit=20 on the wire after selecting '20'."
+    },
+    {
+      "page": "users.html",
+      "control": "row count / pager label",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "users",
+      "request_shape": "{..., fields:['COUNT(*)'], ...same where...}",
+      "response_shape": "{users:[{'COUNT(*)': <int>}]}",
+      "read_write": "read",
+      "notes": "Raw SQL aggregate function passed as a field name."
+    },
+    {
+      "page": "users.html",
+      "control": "row's custom-fields column",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "c_users",
+      "request_shape": "{fields:[user_id,id,cpf], where: users.id=<row id>}",
+      "response_shape": "{c_users:[{user_id,id,cpf}]}",
+      "read_write": "read",
+      "notes": null
+    },
+    {
+      "page": "users.html",
+      "control": "row's face-image indicator",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "face_templates",
+      "request_shape": "{fields:[id,user_id,template], where: users.id=<row id>}",
+      "response_shape": "{face_templates:[{id,user_id,template:<base64 biometric blob>}]}",
+      "read_write": "read",
+      "notes": "SECURITY: raw biometric template returned to an ordinary list-page query. Never logged; no value stored anywhere in this repo."
+    },
+    {
+      "page": "users.html",
+      "control": "row's per-user schedule indicator",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "opening_times",
+      "request_shape": "{fields:[id,user_id,door_id,time], where:[{field:user_id, value:<id>}]}",
+      "response_shape": "{opening_times:[]}",
+      "read_write": "read",
+      "notes": "Confirms a single where-clause needs no connector key at all."
+    },
+    {
+      "page": "group.html",
+      "control": "group listing table",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "groups",
+      "request_shape": "{fields:[id,name], where:[], order:[name], offset, limit, finish:true}",
+      "response_shape": "{groups:[{id,name}]}",
+      "read_write": "read",
+      "notes": null
+    },
+    {
+      "page": "timespan.html",
+      "control": "time zones listing (Schedules)",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "time_zones",
+      "request_shape": "{fields:[id,name], where:[], order:[name], offset, limit, finish:true}",
+      "response_shape": "{time_zones:[{id,name}]}",
+      "read_write": "read",
+      "notes": null
+    },
+    {
+      "page": "timespan.html",
+      "control": "time spans for a selected time zone",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "time_spans",
+      "request_shape": "{fields:[id,time_zone_id,start,end,sun,mon,tue,wed,thu,fri,sat,hol1,hol2,hol3], where: time_zones.id=<id>}",
+      "response_shape": "{time_spans:[{...}]}",
+      "read_write": "read",
+      "notes": null
+    },
+    {
+      "page": "reportcustomview.html?report=1",
+      "control": "report definition load",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "reports",
+      "request_shape": "{object:reports, where:{reports:{id:1}}}",
+      "response_shape": "{reports:[{id,name,file_name,object,header,delimiter,line_break}]}",
+      "read_write": "read",
+      "notes": "Different where shape (nested object, not array-of-clauses) than every other object in this project."
+    },
+    {
+      "page": "reportcustomview.html?report=1",
+      "control": "report filter widgets load",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "report_filters",
+      "request_shape": "{object:report_filters, where:{report_filters:{report_id:1}}}",
+      "response_shape": "{report_filters:[{id,report_id,object,field,value,visible,editable}]}",
+      "read_write": "read",
+      "notes": null
+    },
+    {
+      "page": "reportcustomview.html?report=1",
+      "control": "user-filter dropdown",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "users",
+      "request_shape": "{object:users, order:[ascending,name]}  -- NO fields restriction",
+      "response_shape": "{users:[{id,registration,name,password,panic_password,salt,panic_salt,expires,user_type_id,begin_time,end_time,image_timestamp,last_access}]}",
+      "read_write": "read",
+      "notes": "SECURITY: omitting 'fields' returns every column including panic_password/panic_salt, previously unknown fields. Never logged; no value stored anywhere in this repo."
+    },
+    {
+      "page": "reportcustomview.html?report=1",
+      "control": "report data rows",
+      "evidence": "LIVE_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/load_objects.fcgi",
+      "object": "access_logs",
+      "request_shape": "same access_logs fields Phase 1 confirmed (id,time,user_id,portal_id,log_type_id,event), date-range filtered, paginated",
+      "response_shape": "{access_logs:[{...}]}",
+      "read_write": "read",
+      "notes": "213 rows over default ~29-day window on this device."
+    },
+    {
+      "page": "configurations.html",
+      "control": "About tile",
+      "evidence": "LIVE_CONFIRMED",
+      "method": null,
+      "endpoint": null,
+      "object": null,
+      "request_shape": "no new request -- reuses cached system_information.fcgi response client-side",
+      "response_shape": "Device/Serial/Firmware/SecBox/MAC/Device ID panel",
+      "read_write": "read",
+      "notes": "SecBox = EAM firmware version label in this UI."
+    },
+    {
+      "page": "configurations.html (via 78-command dispatcher)",
+      "control": "every Settings tile's save/action button",
+      "evidence": "UI_HANDLER_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/<command>.fcgi (see messenger_commands.json)",
+      "object": null,
+      "request_shape": "varies per command; not enumerated (static discovery of command names only, payload shapes not read)",
+      "response_shape": "not observed",
+      "read_write": "write (for the write-shaped commands) / read (for the get_*/export_* commands)",
+      "notes": "Handler existence and dispatch mechanism confirmed by reading source; never invoked. See docs/ui-action-protocol-map.md's prohibited-operation mapping table."
+    },
+    {
+      "page": "configurations.html",
+      "control": "Import (import_objects.fcgi)",
+      "evidence": "UI_HANDLER_CONFIRMED",
+      "method": "POST",
+      "endpoint": "/import_objects.fcgi",
+      "object": null,
+      "request_shape": "query-string params: resolution, ignore_columns, ignore_tables (built from JSON.stringify)",
+      "response_shape": "not observed",
+      "read_write": "write",
+      "notes": "Explicitly prohibited operation; handler read statically only."
+    }
+  ],
+  "messenger_commands": "see artifacts/live_capture/messenger_commands.json for the full 78-command list"
+}

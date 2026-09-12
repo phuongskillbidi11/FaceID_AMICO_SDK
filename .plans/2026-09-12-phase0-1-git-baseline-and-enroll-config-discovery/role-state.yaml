@@ -1,0 +1,5 @@
+current_role: executor
+activated_at: "2026-09-12T09:12:14Z"
+activated_for_state: APPROVED
+prompt_generated_at: "2026-09-12T09:12:14Z"
+context_manifest: context-manifest-executor.yaml

@@ -1,0 +1,11 @@
+{
+  "name": "amico-sdk",
+  "version": "0.1.0",
+  "description": "Read-only C++17 SDK for the HID AMICO VL70LF Web UI HTTP protocol",
+  "dependencies": [
+    "curl",
+    "nlohmann-json",
+    "doctest"
+  ],
+  "builtin-baseline": "52d80838fb40c755b1615fbc9c7b994a33742a22"
+}

@@ -1,0 +1,18 @@
+---
+Checks: >
+  -*,
+  bugprone-*,
+  cert-*,
+  cppcoreguidelines-slicing,
+  cppcoreguidelines-pro-type-member-init,
+  modernize-use-override,
+  modernize-use-nullptr,
+  modernize-use-default-member-init,
+  performance-*,
+  readability-braces-around-statements,
+  readability-else-after-return,
+  -bugprone-easily-swappable-parameters,
+  -cert-err58-cpp
+WarningsAsErrors: ''
+HeaderFilterRegex: '(include|src)/.*'
+FormatStyle: none

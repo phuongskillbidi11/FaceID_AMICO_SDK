@@ -1,0 +1,26 @@
+plan: 2026-09-11-p1-read-only-browser-mcp-discovery-pass-
+risk_level: feature
+planned_at:
+    git_sha: 2ff9b0e41be72bc2eb51e7ae4365b4b96c280b83
+state: COMPLETED
+write_scope: []
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-11T15:29:50Z"
+verification:
+    verdict: PASS
+    verified_at: "2026-09-11T15:50:42Z"
+role_verification:
+    verdict: PASS
+    verified_at: "2026-09-11T15:51:11Z"
+spec_approved_at: "2026-09-11T15:28:49Z"
+spec_approved_by: 'user (chat: ''Yes, proceed with P1'')'

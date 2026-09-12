@@ -1,0 +1,24 @@
+{
+  "users": [
+    {
+      "id": 36,
+      "name": "Test User B",
+      "registration": "",
+      "password": "REDACTED_FOR_FIXTURE",
+      "salt": "REDACTED_FOR_FIXTURE",
+      "panic_password": "REDACTED_FOR_FIXTURE",
+      "panic_salt": "REDACTED_FOR_FIXTURE",
+      "user_type_id": 0,
+      "begin_time": 0,
+      "end_time": 0,
+      "last_access": 1789162715,
+      "nested": {
+        "session_token_like_field": "REDACTED_FOR_FIXTURE",
+        "array_of_secrets": [
+          {"authorization": "REDACTED_FOR_FIXTURE"},
+          {"api_key": "REDACTED_FOR_FIXTURE"}
+        ]
+      }
+    }
+  ]
+}

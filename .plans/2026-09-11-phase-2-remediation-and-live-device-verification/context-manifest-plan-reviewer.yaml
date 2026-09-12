@@ -1,0 +1,7 @@
+role: plan-reviewer
+plan: 2026-09-11-phase-2-remediation-and-live-device-verification
+generated_at: 2026-09-11T17:00:32Z
+request: "Take the existing C++ AMICO SDK implementation (currently sitting as\nunreleased WIP inside the `BLOCKED` plan\n`.plans/2026-09-11-p5-rewrite-the-phase-2-read-only-c-17-am`) through a\ngovernance-correct remediation: a freshly and explicitly authorized\nexecution/verification cycle, a genuinely independent clean-room offline\nrebuild+retest, and — only if separately approved — a read-only live smoke\ntest against the real device at `192.168.2.156`. The SDK code itself is\n**not** assumed broken and is not being rewritten; what is being redone is\nthe *proof* that it works, produced by actors/contexts independent of the\none that wrote it.\n\n**Done looks like:** The plan reaches a state where (a) approval provenance\nfor every gate is a fresh, distinct, non-inferred user message, (b) a\nVerifier session with no shared context with the Executor has reconfigured\nand rebuilt the SDK from a clean `build/` directory and rerun the full\noffline suite + secret scan, with compiler/CMake/dependency versions\nrecorded in a new verification artifact, and (c) the live-device smoke\ntest's status is explicitly recorded as either \"approved and run, see\nevidence\" or \"not approved this cycle\" — never silently skipped or silently\nassumed.\n\n---"
+risk_level: high-risk
+requires_approval: true
+project_sections:

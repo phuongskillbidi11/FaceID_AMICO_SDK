@@ -1,0 +1,5 @@
+# Verify Report — 2026-09-11-p5-rewrite-the-phase-2-read-only-c-17-am
+
+## Git diff since 2ff9b0e41be72bc2eb51e7ae4365b4b96c280b83
+
+## Verdict: PASS

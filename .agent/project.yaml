@@ -1,0 +1,14 @@
+project_name: FaceID_AMICO_SDK
+mode: modern
+harness_profile: software
+config_version: 2
+stack:
+    type: unknown
+    build_cmd: ""
+    test_cmd: ""
+    run_cmd: ""
+    lint_cmd: ""
+enabled_skills:
+    - engineering/karpathy-guidelines
+workflow:
+    planning_mode: spec_first

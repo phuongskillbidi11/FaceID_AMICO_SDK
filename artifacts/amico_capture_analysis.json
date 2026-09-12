@@ -1,0 +1,17 @@
+{
+  "sources": [],
+  "errors": [
+    "HAR file not found: captures/amico_webui.har",
+    "tshark not found on PATH; PCAP/PCAPNG files were not analyzed. Install Wireshark/tshark or pass --tshark-path."
+  ],
+  "summary": {
+    "total_transactions": 0,
+    "stream_count": 0,
+    "endpoint_count": 0,
+    "read_endpoint_count": 0,
+    "write_endpoint_count": 0,
+    "unresolved_count": 0,
+    "unresolved_examples": []
+  },
+  "transactions": []
+}

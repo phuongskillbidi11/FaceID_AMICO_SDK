@@ -1,0 +1,12 @@
+role: executor
+plan: 2026-09-11-phase-1-5-complete-the-amico-vl70lf-web-
+generated_at: 2026-09-11T15:17:58Z
+request: "Close the gap between what Phase 1 actually captured (login, dashboard\nwidgets, logout — a narrow slice) and what a production SDK needs evidence\nfor, by running one more read-only discovery pass over the rest of the safe\nWeb UI, then rewrite the Phase 2 SDK spec against that fuller evidence base\nbefore any Executor work resumes.\n\n**Done looks like:** every safe, read-only Web UI page/control is mapped\n`UI page → UI control → DOM selector → JS handler → HTTP method → FastCGI\nendpoint → request schema → response schema` with a graded evidence level;\nevery state-changing control is identified and its handler/payload\nstatically read (never triggered); all of it is written to the artifacts\nlisted under P3; the discovery gate (P4) passes; and a corrected Phase 2\n`spec.md` exists and is explicitly approved by the user before any\n`tasks.md` is written or Executor role is activated.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - reverse-engineering: "matched request text"
+  - tcp-ip: "matched request text"
+  - plc: "matched request text"
+  - protocol-engineering: "matched request text"
+tools:

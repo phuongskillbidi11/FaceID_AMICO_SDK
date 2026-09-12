@@ -1,0 +1,28 @@
+plan: 2026-09-11-p5-rewrite-the-phase-2-read-only-c-17-am
+risk_level: high-risk
+planned_at:
+    git_sha: 2ff9b0e41be72bc2eb51e7ae4365b4b96c280b83
+state: BLOCKED
+write_scope: []
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: true
+approved_at: "2026-09-11T15:58:11Z"
+approved_by: 'user (chat: ''Yes, proceed with P5'' then ''Approve, keep get(id) with std::optional<AmicoUser>'' — explicit sequential approval to write the spec and then execute it; local build/test only, no device contact)'
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-11T15:57:56Z"
+verification:
+    verdict: PASS
+    verified_at: "2026-09-11T16:15:24Z"
+role_verification:
+    verdict: PASS
+    verified_at: "2026-09-11T16:15:50Z"
+spec_approved_at: "2026-09-11T15:56:07Z"
+spec_approved_by: 'user (chat: ''Approve, keep get(id) with std::optional<AmicoUser>'')'

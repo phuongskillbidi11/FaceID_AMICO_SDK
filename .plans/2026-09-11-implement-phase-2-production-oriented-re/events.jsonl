@@ -1,0 +1,12 @@
+{"type":"triaged","at":"2026-09-11T14:49:41Z","detail":"high-risk"}
+{"type":"state_changed","at":"2026-09-11T14:54:42Z","detail":"NEEDS_SPEC_APPROVAL"}
+{"type":"spec_approved","at":"2026-09-11T14:54:42Z"}
+{"type":"state_changed","at":"2026-09-11T14:54:42Z","detail":"SPEC_APPROVED"}
+{"type":"state_changed","at":"2026-09-11T14:56:17Z","detail":"PLANNED"}
+{"at":"2026-09-11T14:56:24Z","context_manifest":"context-manifest-plan-reviewer.yaml","role":"plan-reviewer","state":"PLANNED","type":"role_activated"}
+{"type":"reviewed","at":"2026-09-11T14:56:59Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-11T14:56:59Z","detail":"REVIEWED"}
+{"type":"approved","at":"2026-09-11T14:57:10Z","detail":"user (pre-authorized via task message: 'Continue autonomously... Do not stop after planning', see DECISION_LOG.md 2026-09-11 entry)"}
+{"type":"state_changed","at":"2026-09-11T14:57:10Z","detail":"APPROVED"}
+{"at":"2026-09-11T14:57:27Z","context_manifest":"context-manifest-executor.yaml","role":"executor","state":"APPROVED","type":"role_activated"}
+{"type":"blocked","at":"2026-09-11T15:11:33Z","detail":"User halted execution: Phase 2 spec was written before Web UI protocol discovery was actually complete (only login/dashboard/logout were captured in Phase 1; users-list detail, search/filter/sort/pagination, groups/areas/schedules, reports, and static analysis of write-controls were never inspected). Superseded by a new Phase 1.5 discovery-completion plan; corrected Phase 2 spec will be re-submitted for approval after that gate passes. No source/build/network action taken beyond what was already on disk when this instruction arrived."}

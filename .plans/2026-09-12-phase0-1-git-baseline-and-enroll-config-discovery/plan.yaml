@@ -1,0 +1,27 @@
+plan: 2026-09-12-phase0-1-git-baseline-and-enroll-config-discovery
+risk_level: feature
+planned_at:
+    git_sha: 2ff9b0e41be72bc2eb51e7ae4365b4b96c280b83
+state: APPROVED
+write_scope:
+    - .gitignore
+    - docs/src-map.md
+    - docs/ui-action-protocol-map.md
+    - artifacts/ui-action-map.json
+    - artifacts/live_capture/
+    - captures/screenshots/
+    - .plans/2026-09-12-phase0-1-git-baseline-and-enroll-config-discovery/
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-12T09:11:17Z"
+spec_approved_at: "2026-09-12T09:06:34Z"
+spec_approved_by: 'user (chat message, verbatim): ''oke'' -- confirming spec.md for Giai đoạn 0+1 (git baseline + Enroll/config discovery)'

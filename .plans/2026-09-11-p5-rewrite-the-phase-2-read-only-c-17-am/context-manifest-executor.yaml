@@ -1,0 +1,12 @@
+role: executor
+plan: 2026-09-11-p5-rewrite-the-phase-2-read-only-c-17-am
+generated_at: 2026-09-11T15:58:20Z
+request: "Ship a buildable, testable C++17 client library (`AmicoClient`) covering\nexactly the operations both discovery passes confirmed as read-only and\nin-scope: login, session check, device info, list/get users, list access\nlogs, logout — using the real wire contracts (filters, pagination,\nfield-omission danger) confirmed in `docs/amico-endpoints.md` and\n`docs/ui-action-protocol-map.md`, not the narrower Phase 1-only picture the\nblocked plan was built on.\n\n**Done looks like:** `cmake --build` produces `amico_sdk` (static lib),\n`amico_tests` (all offline, all green, no network), and six example\nbinaries; a gated live-smoke-test binary exists but is not run by default;\n`AmicoUser` never carries `password`, `salt`, `panic_password`, or\n`panic_salt` even though the wire protocol would hand them over if asked;\nno internal query ever omits `fields`.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - cpp: "matched request text"
+  - cmake: "matched request text"
+  - testing: "matched request text"
+  - linux: "matched request text"
+tools:

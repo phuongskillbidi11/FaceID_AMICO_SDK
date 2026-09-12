@@ -1,0 +1,30 @@
+plan: 2026-09-11-phase-2-remediation-and-live-device-verification
+risk_level: high-risk
+planned_at:
+    git_sha: 2ff9b0e41be72bc2eb51e7ae4365b4b96c280b83
+state: COMPLETED
+write_scope: []
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: true
+approved_at: "2026-09-12T04:36:55Z"
+approved_by: 'user (chat message, verbatim): ''APPROVE_EXECUTION:2026-09-11-phase-2-remediation-and-live-device-verification'' -- issued after genuine Plan Reviewer PASS (Codex, 2026-09-12 11:32), superseding the earlier explicit override recorded at 2026-09-11T18:12:49Z. This is the fresh, distinct execution approval for the reviewed plan.'
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-12T04:34:08Z"
+verification:
+    verdict: PASS
+    verified_at: "2026-09-12T05:06:24Z"
+role_verification:
+    verdict: PASS
+    verified_at: "2026-09-12T08:07:23Z"
+    verified_by: Independent Verifier (fresh Claude Code subagent, no shared context with Executor)
+    notes: 'Clean rebuild in new build-verify/ dir: 36/36 targets exit 0; ctest 1/1 and doctest 45 cases/250 assertions match Group 1 exactly; full_sequence* filter 1/1 (7 assertions); secret scan clean except the same known pre-existing false positive in an unrelated prior plan''s prose; live-smoke binary skip-gate confirmed with all 4 live env vars unset and no device contact; verification-manifest.md authored fresh with concrete toolchain/hash/dependency data.'
+spec_approved_at: "2026-09-11T16:54:39Z"
+spec_approved_by: 'user (chat message, verbatim): ''APPROVE_SPEC_ONLY:2026-09-11-phase-2-remediation-and-live-device-verification'' — issued after spec-approval gate was active; single-use, spec-approval scope only'

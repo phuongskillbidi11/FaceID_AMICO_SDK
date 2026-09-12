@@ -1,0 +1,14 @@
+{"type":"triaged","at":"2026-09-12T09:01:45Z","detail":"feature"}
+{"type":"spec_approved","at":"2026-09-12T09:06:34Z","detail":"user (chat message, verbatim): 'oke' -- confirming spec.md for Giai đoạn 0+1 (git baseline + Enroll/config discovery)"}
+{"type":"state_changed","at":"2026-09-12T09:06:40Z","detail":"NEEDS_SPEC_APPROVAL"}
+{"type":"state_changed","at":"2026-09-12T09:06:47Z","detail":"SPEC_APPROVED"}
+{"type":"state_changed","at":"2026-09-12T09:10:16Z","detail":"PLANNED"}
+{"at":"2026-09-12T09:10:23Z","context_manifest":"context-manifest-plan-reviewer.yaml","role":"plan-reviewer","state":"PLANNED","type":"role_activated"}
+{"type":"reviewed","at":"2026-09-12T09:11:17Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-12T09:11:17Z","detail":"REVIEWED"}
+{"type":"state_changed","at":"2026-09-12T09:11:22Z","detail":"APPROVED"}
+{"adapter":"codex","at":"2026-09-12T09:12:03Z","capability":"codex.execute","reason":"role not active for this plan — no activation on record for executor (run `eng adapter prompt executor \u003cplan-dir\u003e` first)","result":"DENIED","role":"executor","type":"tool_invocation"}
+{"at":"2026-09-12T09:12:14Z","context_manifest":"context-manifest-executor.yaml","role":"executor","state":"APPROVED","type":"role_activated"}
+{"adapter":"codex","at":"2026-09-12T09:12:35Z","capability":"codex.execute","log_path":"C:\\Users\\Admin\\i-Sotf_IIoT\\FaceID_AMICO_SDK\\.agent\\logs\\tool-codex-20260912-091235.log","reason":"WRITE-risk capability, plan is approved","result":"ALLOWED","role":"executor","type":"tool_invocation"}
+{"adapter":"codex","at":"2026-09-12T09:13:17Z","capability":"codex.execute","log_path":"C:\\Users\\Admin\\i-Sotf_IIoT\\FaceID_AMICO_SDK\\.agent\\logs\\tool-codex-20260912-091317.log","reason":"WRITE-risk capability, plan is approved","result":"ALLOWED","role":"executor","type":"tool_invocation"}
+{"adapter":"codex","at":"2026-09-12T09:14:16Z","capability":"codex.execute","log_path":"C:\\Users\\Admin\\i-Sotf_IIoT\\FaceID_AMICO_SDK\\.agent\\logs\\tool-codex-20260912-091416.log","reason":"WRITE-risk capability, plan is approved","result":"ALLOWED","role":"executor","type":"tool_invocation"}

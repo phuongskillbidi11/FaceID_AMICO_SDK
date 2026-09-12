@@ -1,0 +1,5 @@
+current_role: verifier
+activated_at: "2026-09-11T15:20:59Z"
+activated_for_state: VERIFYING
+prompt_generated_at: "2026-09-11T15:20:59Z"
+context_manifest: context-manifest-verifier.yaml

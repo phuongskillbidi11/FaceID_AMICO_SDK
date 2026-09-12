@@ -1,0 +1,12 @@
+role: executor
+plan: 2026-09-11-p1-read-only-browser-mcp-discovery-pass-
+generated_at: 2026-09-11T15:29:57Z
+request: "Visit every safe, read-only page/control the parent spec's P1 section\nlists, and statically read (never invoke) every write control's JS handler\nper P2, so that Phase 2's SDK spec can be corrected against real coverage\ninstead of the narrow login/dashboard/logout slice Phase 1 originally\ncaptured.\n\n**Done looks like:** `docs/ui-action-protocol-map.md` and\n`artifacts/ui-action-map.json` exist, mapping each safe UI action\n`page → control → DOM selector → JS handler → HTTP method → FastCGI\nendpoint → request schema → response schema`; `docs/amico-endpoints.md` /\n`docs/amico-protocol-map.md` / `artifacts/amico-endpoints.json` are updated\nwith the new findings; every state-changing control has a\n`UI_HANDLER_CONFIRMED` (or explicitly \"handler not statically resolvable\")\nentry; the P4 discovery gate's 13 checks are re-evaluated and their status\nrecorded; and no write action was ever sent to the device.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - reverse-engineering: "matched request text"
+  - testing: "matched request text"
+  - protocol-engineering: "matched request text"
+  - tcp-ip: "matched request text"
+tools:
