@@ -10,10 +10,11 @@
 | Path | What lives there |
 |---|---|
 | `include/amico/Config.hpp` | `AmicoConfig` — all client configuration (base URL, credentials, timeouts, size caps, page size caps, `autoRelogin`, `logSink`). |
-| `include/amico/Errors.hpp` | The 10-type exception hierarchy (`AmicoError` base + `ConfigurationError`, `NetworkError`, `TimeoutError`, `AuthenticationError`, `InvalidSessionError`, `HttpError`, `ProtocolError`, `JsonParseError`, `ResponseTooLargeError`, `UnsupportedOperationError`). |
+| `include/amico/Errors.hpp` | The exception hierarchy (`AmicoError` base + `ConfigurationError`, `NetworkError`, `TimeoutError`, `TlsVerificationError`, `AuthenticationError`, `InvalidSessionError`, `HttpError`, `ProtocolError`, `JsonParseError`, `ResponseTooLargeError`, `UnsupportedOperationError`); the new `TlsVerificationError` derives from `NetworkError` for peer-certificate TLS verification failures. |
 | `include/amico/Cancellation.hpp` | `CancellationToken` — optional cooperative cancellation for in-flight requests. |
-| `include/amico/Types.hpp` | Public data types: `SystemInformation`, `NetworkInfo`, `AmicoUser`, `UserQuery`, `AccessLogEntry`, `AccessLogQuery`. |
-| `include/amico/Client.hpp` | `AmicoClient` — the public entry point (`login`, `isSessionValid`, `getSystemInformation`, `logout`, `users()`, `accessLogs()`, `debugGetObjectMetadataJson()`), plus the `UsersApi`/`AccessLogsApi` nested classes. |
+| `include/amico/Types.hpp` | Public data types: `SystemInformation`, `NetworkInfo` (including `NetworkInfo::selfSignedCertificate`), `AmicoUser`, `UserQuery`, `AccessLogEntry`, `AccessLogQuery`. |
+| `include/amico/Client.hpp` | `AmicoClient` — the public entry point (`login`, `isSessionValid`, `getSystemInformation`, `logout`, `users()`, `accessLogs()`, `debugGetObjectMetadataJson()`), plus credential-free reachability probing via `AmicoClient::checkReachable()` and the `UsersApi`/`AccessLogsApi` nested classes. |
+| `src/NetworkSafety.hpp` / `src/NetworkSafety.cpp` | Shared decision logic behind `test/live/live_smoke_test.cpp`'s preflight and TLS-probe steps: `reachableThenLogin()` gates login on a successful credential-free reachability probe; `probeHttpsIfEnabled()` runs a conditional secondary HTTPS/TLS probe only when `NetworkInfo::sslEnabled` is true, distinguishing verified TLS, verification failure, and network failure (otherwise not applicable). |
 | `src/Session.hpp` / `.cpp` | In-memory-only holder of the `login`/`session` cookie pair; RAII zero-wipe on clear/destroy. Never persisted, never logged. |
 | `src/JsonRedact.hpp` / `.cpp` | `redactJson()` — recursive, case-insensitive sensitive-key redaction for diagnostics/logging. Secondary defense; the primary defense is `ObjectQuery` never requesting sensitive fields in the first place. |
 | `src/UrlValidation.hpp` / `.cpp` | `validateBaseUrl()` — rejects embedded credentials, non-http(s) schemes, query strings, fragments. |
