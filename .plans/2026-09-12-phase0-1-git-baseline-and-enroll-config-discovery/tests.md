@@ -26,7 +26,7 @@ grep -c "\.vs/" .gitignore
 ```
 **Pass:** All four commands print `1`.
 **Fail:** Any prints `0`.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass
 
 ---
 
@@ -38,7 +38,7 @@ grep -rniE '"(password|hash|salt)"\s*:\s*"[0-9a-f]{16,}"' --include='*.md' --inc
 **Pass:** No output, or only the already-documented benign false positive
 (read the matched line to confirm it is that known case, not assumed).
 **Fail:** Any other match.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass — zero output from both scans.
 
 ---
 
@@ -52,7 +52,8 @@ git ls-files | wc -l
 build/cache paths prints nothing; the tracked file count is large (SDK +
 docs + plans, not just `README.md`).
 **Fail:** No new commit, or any build/cache path is tracked.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass — two new commits (`27c035b`, `744617b`) on top of
+`2ff9b0e`; zero build/cache paths tracked; 326 tracked files total.
 
 ---
 
@@ -65,13 +66,13 @@ grep -c "selfSignedCertificate" docs/src-map.md
 ```
 **Pass:** All four print `1` or more.
 **Fail:** Any prints `0`.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass
 
 ---
 
 ### Test F-5 — Remaining `MessengerUtil` commands are documented (local-only pass)
 ```bash
-grep -c "P6 static pass" docs/ui-action-protocol-map.md
+grep -c "P6 static discovery" docs/ui-action-protocol-map.md
 grep -c "user_get_image_list" docs/ui-action-protocol-map.md
 grep -c "user_list_images" docs/ui-action-protocol-map.md
 grep -c "reset_crypto_key" docs/ui-action-protocol-map.md
@@ -80,7 +81,8 @@ grep -c "osdp_scbk" docs/ui-action-protocol-map.md
 **Pass:** All five print `1` or more (spot-checks a representative sample
 of the ~50 commands from Task 4.1, not just the section header).
 **Fail:** Any prints `0`.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass — all 5 checks print `1` (see tasks.md Task 4.2 for
+`user_list_images`'s exact count of 2, both legitimate occurrences).
 
 ---
 
@@ -97,7 +99,9 @@ and a new screenshot exist for the Enroll page.
 skip and not as a Fail.
 **Fail:** Group 5 was attempted but any of the three checks above comes up
 empty.
-**Result:** [ ] Pass / [ ] Fail / [ ] Not run this cycle
+**Result:** [x] Not run this cycle — no live-device approval message
+received for Group 5 as of this sign-off; Groups 1-4 are complete and
+this test does not block them.
 
 ---
 
@@ -116,7 +120,11 @@ Group 3/4 landed as a separate commit from Group 2.)
 existing tracked `.cpp`/`.hpp`/`CMakeLists.txt`/`vcpkg.json` content
 changed.
 **Fail:** Any diff shown against those extensions.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass — 2026-09-12: `git diff --stat 27c035b HEAD -- '*.cpp' '*.hpp' 'CMakeLists.txt' 'vcpkg.json'`
+(the range covering only this plan's own commits, `27c035b`→`744617b`)
+produced empty output. (The baseline commit `27c035b` itself necessarily
+shows all these files as new additions vs. `2ff9b0e` — expected, first
+tracking, not a change.)
 
 ---
 
@@ -131,17 +139,18 @@ re-running the binary — that evidence already exists from the prior
 `phase-2-remediation-and-live-device-verification` plan and is not being
 re-litigated here.
 **Fail:** Neither binary exists.
-**Result:** [ ] Pass / [ ] Fail
+**Result:** [x] Pass — 2026-09-12: both `build-exec/amico_tests.exe` and
+`build-verify/amico_tests.exe` still present.
 
 ---
 
 ## Sprint sign-off
 
-- [ ] Build gate: N/A (documented above, not silently skipped)
-- [ ] All functional tests F-1–F-5: ✅
-- [ ] Functional test F-6: ✅ or explicitly "Not run this cycle"
-- [ ] All regression tests: ✅
-- [ ] `DECISION_LOG.md` updated with any new decisions made during execution
-- [ ] `sprint-summary.md` written, explicitly stating Group 5's status
+- [x] Build gate: N/A (documented above, not silently skipped)
+- [x] All functional tests F-1–F-5: ✅
+- [x] Functional test F-6: "Not run this cycle" (Group 5 not approved)
+- [x] All regression tests: ✅
+- [x] `DECISION_LOG.md` updated with any new decisions made during execution
+- [x] `sprint-summary.md` written, explicitly stating Group 5's status
 
-**Sign-off date:** [DATE]
+**Sign-off date:** 2026-09-12
