@@ -1,0 +1,7 @@
+role: plan-reviewer
+plan: 2026-09-12-phase2-user-crud-write-api
+generated_at: 2026-09-12T10:36:40Z
+request: "Mở rộng `amico_sdk` (hiện tại 100% read-only) để hỗ trợ **tạo, sửa, xoá\nuser** — API ghi đầu tiên trong toàn bộ lịch sử project này. Đây là bước\nnền tảng để sau này xây app quản lý user tương tự web UI thiết bị.\n\n**Done looks like:** `AmicoClient::UsersApi` có thêm `create()`,\n`update()`, `remove()`; mỗi hàm có unit test offline (fixture-based,\nkhông chạm device) và — chỉ nếu được duyệt riêng — 1 lần live-test tạo\nrồi xoá đúng 1 user thử nghiệm (không chạm bất kỳ user thật nào đang có\ntrên thiết bị: `Phat`, `Phuong Hoang`, `Trung Dung`).\n\n---"
+risk_level: high-risk
+requires_approval: true
+project_sections:

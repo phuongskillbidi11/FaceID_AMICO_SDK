@@ -1,0 +1,9 @@
+role: executor
+plan: 2026-09-13-fix-user-profile-photo-not-displaying-in
+generated_at: 2026-09-13T14:46:43Z
+request: "On the Users tab, every row with an enrolled face currently shows \"No\nimage\" instead of the actual photo — even though the real device (and\nits own stock web UI) has the photo and shows it correctly. After this\nfix, a user's row shows their real photo whenever the device has one,\nand still shows \"No image\" only for users that genuinely have none.\n\n**Done looks like:** Opening the Users tab after logging into a real\ndevice shows real photos for users who have an enrolled face/image,\nverified live against `http://192.168.2.156`.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - reverse-engineering: "matched request text"
+tools:

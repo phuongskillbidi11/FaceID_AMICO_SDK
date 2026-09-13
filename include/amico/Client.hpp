@@ -12,9 +12,13 @@ namespace amico {
 
 class IHttpTransport;  // defined in src/http/HttpTransport.hpp (internal, not installed)
 
-/// Read-only client for the HID AMICO VL70LF Web UI HTTP protocol.
-/// See docs/amico-protocol-map.md / docs/amico-endpoints.md for the
-/// captured evidence this class implements against.
+/// Client for the HID AMICO VL70LF Web UI HTTP protocol, with read
+/// operations and write support for Users create/update/remove plus
+/// group membership, cards, the Administrator flag, profile image, and
+/// door-entry password/PIN (set-only -- never read back). See
+/// docs/amico-protocol-map.md / docs/amico-endpoints.md /
+/// docs/ui-action-protocol-map.md for the captured evidence this class
+/// implements against.
 ///
 /// Usage:
 ///   AmicoConfig config;
@@ -55,13 +59,75 @@ public:
     /// server's response.
     void logout();
 
-    /// Typed wrapper over the internal load_objects.fcgi query engine for
-    /// the `users` object. Never requests or exposes password/salt/
+    /// Typed read/write wrapper for the `users` object.
+    /// Never requests, accepts, or exposes password/salt/
     /// panic_password/panic_salt.
     class UsersApi {
     public:
         std::vector<AmicoUser> list(const UserQuery& query = {});
         std::optional<AmicoUser> get(int64_t id);
+
+        /// POST /create_objects.fcgi. Returns the device-assigned user id.
+        int64_t create(const NewUser& user);
+
+        /// POST /modify_objects.fcgi. Throws ProtocolError if no user changed.
+        void update(const UserUpdate& user);
+
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if no user removed.
+        void remove(int64_t id);
+
+        /// POST /create_objects.fcgi against `user_groups`.
+        void addToGroup(int64_t userId, int64_t groupId);
+        /// POST /destroy_objects.fcgi against `user_groups`.
+        void removeFromGroup(int64_t userId, int64_t groupId);
+
+        /// POST /create_objects.fcgi against `cards`. `value` is packed
+        /// from areaCode/cardNumber (see docs/ui-action-protocol-map.md).
+        /// Returns the device-assigned card id.
+        int64_t addCard(int64_t userId, int64_t areaCode, int64_t cardNumber);
+        /// POST /destroy_objects.fcgi against `cards`.
+        void removeCard(int64_t cardId);
+
+        /// Grants or revokes the Administrator role. A no-op if the user
+        /// is already in the requested state (matches the real UI's own
+        /// asymmetric save() behavior -- see docs/ui-action-protocol-map.md).
+        void setAdministrator(int64_t userId, bool isAdmin);
+
+        /// GET /user_get_image.fcgi?user_id=<id>. Returns raw image bytes
+        /// and the device Content-Type (image/jpeg only if absent).
+        /// Throws HttpError(404) when no image exists, HttpError for other
+        /// non-2xx statuses except 401 (InvalidSessionError, with optional
+        /// single autoRelogin retry). Requires an active session.
+        UserImage getImage(int64_t userId);
+
+        /// POST /user_set_image.fcgi?user_id=<id>&match=1&timestamp=<epoch>,
+        /// raw application/octet-stream body (LIVE_CONFIRMED wire format,
+        /// including the match/timestamp params -- 2026-09-13). `bytes`
+        /// MUST be JPEG-encoded -- the device rejects other formats (e.g.
+        /// PNG) with HTTP 400. This SDK does not convert image formats
+        /// itself; the caller provides JPEG bytes (see
+        /// docs/ui-action-protocol-map.md's Image encoding requirement).
+        /// **Important:** this endpoint enrolls/updates the device's
+        /// face-recognition template for this user -- it is NOT a purely
+        /// cosmetic photo store. Throws ProtocolError if the device's
+        /// face-detection/quality validation rejects the image (face not
+        /// detected, not centered, too distant/close, low sharpness,
+        /// multiple faces, etc.) -- the exception message includes the
+        /// device's own error details.
+        void setImage(int64_t userId, const std::vector<uint8_t>& bytes);
+        /// POST /user_destroy_image.fcgi, then destroys this user's
+        /// face_templates rows too (LIVE_CONFIRMED 2026-09-13 -- matches
+        /// the real UI's own paired behavior; see setImage()'s note on
+        /// why these are coupled).
+        void removeImage(int64_t userId);
+
+        /// Sets a door-entry password/PIN. Hashes via the device's own
+        /// `user_hash_password` command first (mirroring the real UI),
+        /// then writes only the resulting hash+salt -- this SDK never
+        /// reads a password/salt value back through any API. Always
+        /// confirm with the user before each live call to this method
+        /// (see feedback_write_api_risk_tiers.md).
+        void setPassword(int64_t userId, const std::string& plaintextPassword);
 
     private:
         friend class AmicoClient;
@@ -103,6 +169,18 @@ private:
 
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);
     std::optional<AmicoUser> getUserImpl(int64_t id);
+    int64_t createUserImpl(const NewUser& user);
+    void updateUserImpl(const UserUpdate& user);
+    void removeUserImpl(int64_t id);
+    void addUserToGroupImpl(int64_t userId, int64_t groupId);
+    void removeUserFromGroupImpl(int64_t userId, int64_t groupId);
+    int64_t addUserCardImpl(int64_t userId, int64_t areaCode, int64_t cardNumber);
+    void removeUserCardImpl(int64_t cardId);
+    void setUserAdministratorImpl(int64_t userId, bool isAdmin);
+    UserImage getUserImageImpl(int64_t userId);
+    void setUserImageImpl(int64_t userId, const std::vector<uint8_t>& bytes);
+    void removeUserImageImpl(int64_t userId);
+    void setUserPasswordImpl(int64_t userId, const std::string& plaintextPassword);
     std::vector<AccessLogEntry> listAccessLogsImpl(const AccessLogQuery& query);
 
     struct Impl;

@@ -7,6 +7,7 @@
 #include <nlohmann/json.hpp>
 
 #include "FakeTransport.hpp"
+#include "UserProfileResponder.hpp"
 #include "amico/Client.hpp"
 #include "amico/Config.hpp"
 #include "amico/Errors.hpp"
@@ -83,15 +84,20 @@ TEST_CASE("autoRelogin=true retries exactly once after a fresh login") {
     config.autoRelogin = true;
     AmicoClient client = loggedInClient(&fake, config);
 
-    int loadObjectsCalls = 0;
+    int usersQueryCalls = 0;
+    int profileCalls = 0;
     int loginCalls = 0;
     fake->responder = [&](const HttpRequest& req) {
         if (req.path == "/hidlogin.fcgi") {
             ++loginCalls;
             return FakeTransport::ok(readFixture("login_success.json"));
         }
-        ++loadObjectsCalls;
-        if (loadObjectsCalls == 1) {
+        if (auto response = emptyUserProfileResponse(req)) {
+            ++profileCalls;
+            return *response;
+        }
+        ++usersQueryCalls;
+        if (usersQueryCalls == 1) {
             return FakeTransport::status(401, "{}");
         }
         return FakeTransport::ok(readFixture("users_list_default_filter.json"));
@@ -101,7 +107,107 @@ TEST_CASE("autoRelogin=true retries exactly once after a fresh login") {
     CHECK_NOTHROW(users = client.users().list());
     CHECK(users.size() == 3);
     CHECK(loginCalls == 1);
-    CHECK(loadObjectsCalls == 2);
+    CHECK(usersQueryCalls == 2);
+    CHECK(profileCalls == 18);  // 6 queries for each of the 3 returned users
+}
+
+TEST_CASE("getImage returns exact binary bytes and the device Content-Type") {
+    FakeTransport* fake = nullptr;
+    auto client = loggedInClient(&fake);
+    const std::string bytes("\x89PNG\0\xff", 6);
+    fake->responder = [&](const HttpRequest& req) {
+        CHECK(req.method == "GET");
+        CHECK(req.path == "/user_get_image.fcgi?user_id=36");
+        CHECK(req.body.empty());
+        bool hasCookie = false;
+        for (const auto& header : req.headers) {
+            if (header.name == "Cookie") hasCookie = !header.value.empty();
+            CHECK(header.name != "Content-Type");
+        }
+        CHECK(hasCookie);
+        auto response = FakeTransport::ok(bytes);
+        response.headers.push_back({"Content-Type", "image/png"});
+        return response;
+    };
+    auto image = client.users().getImage(36);
+    CHECK(image.bytes == std::vector<uint8_t>(bytes.begin(), bytes.end()));
+    CHECK(image.contentType == "image/png");
+}
+
+TEST_CASE("getImage defaults to image/jpeg when Content-Type is absent") {
+    FakeTransport* fake = nullptr;
+    auto client = loggedInClient(&fake);
+    fake->responder = [](const HttpRequest&) { return FakeTransport::ok("image bytes"); };
+    CHECK(client.users().getImage(36).contentType == "image/jpeg");
+}
+
+TEST_CASE("getImage reports no image as HttpError 404") {
+    FakeTransport* fake = nullptr;
+    auto client = loggedInClient(&fake);
+    fake->responder = [](const HttpRequest&) { return FakeTransport::status(404); };
+    CHECK_THROWS_WITH_AS(client.users().getImage(36), "no image for user 36", HttpError);
+    try {
+        client.users().getImage(36);
+        FAIL("expected HttpError");
+    } catch (const HttpError& error) {
+        CHECK(error.statusCode() == 404);
+    }
+}
+
+TEST_CASE("getImage preserves other HTTP error status codes") {
+    FakeTransport* fake = nullptr;
+    auto client = loggedInClient(&fake);
+    fake->responder = [](const HttpRequest&) { return FakeTransport::status(500); };
+    try {
+        client.users().getImage(36);
+        FAIL("expected HttpError");
+    } catch (const HttpError& error) {
+        CHECK(error.statusCode() == 500);
+    }
+}
+
+TEST_CASE("getImage 401 with autoRelogin=false does not retry") {
+    FakeTransport* fake = nullptr;
+    auto config = testConfig();
+    config.autoRelogin = false;
+    auto client = loggedInClient(&fake, config);
+    int calls = 0;
+    fake->responder = [&](const HttpRequest&) {
+        ++calls;
+        return FakeTransport::status(401);
+    };
+    CHECK_THROWS_AS(client.users().getImage(36), InvalidSessionError);
+    CHECK(calls == 1);
+}
+
+TEST_CASE("getImage 401 with autoRelogin=true retries exactly once after fresh login") {
+    FakeTransport* fake = nullptr;
+    auto config = testConfig();
+    config.autoRelogin = true;
+    auto client = loggedInClient(&fake, config);
+    bool retryRejected = false;
+    SUBCASE("retry succeeds") {}
+    SUBCASE("second 401 stops retrying") { retryRejected = true; }
+    int imageCalls = 0, loginCalls = 0;
+    fake->responder = [&](const HttpRequest& req) {
+        if (req.path == "/hidlogin.fcgi") {
+            ++loginCalls;
+            return FakeTransport::ok(readFixture("login_success.json"));
+        }
+        CHECK(req.method == "GET");
+        CHECK(req.path == "/user_get_image.fcgi?user_id=36");
+        ++imageCalls;
+        if (imageCalls == 1 || retryRejected) return FakeTransport::status(401);
+        return FakeTransport::ok("photo");
+    };
+    if (retryRejected) {
+        CHECK_THROWS_AS(client.users().getImage(36), InvalidSessionError);
+    } else {
+        auto image = client.users().getImage(36);
+        CHECK(std::string(image.bytes.begin(), image.bytes.end()) == "photo");
+    }
+    CHECK(loginCalls == 1);
+    CHECK(imageCalls == 2);
 }
 
 TEST_CASE("ConfigurationError: base URL with a query string is rejected before any request") {
@@ -129,6 +235,7 @@ TEST_CASE("full_sequence: login -> session-valid -> sysinfo -> users.list -> use
         if (req.path == "/system_information.fcgi") return FakeTransport::ok(readFixture("system_information.json"));
         if (req.path == "/logout.fcgi") return FakeTransport::ok("{}");
         if (req.path == "/load_objects.fcgi") {
+            if (auto response = emptyUserProfileResponse(req)) return *response;
             nlohmann::json body = nlohmann::json::parse(req.body);
             if (body["object"] == "users" && body["where"].size() == 1) {
                 return FakeTransport::ok(readFixture("user_get_found.json"));

@@ -1,0 +1,47 @@
+plan: 2026-09-12-phase2b-users-rich-profile-groups-cards-admin-image-pin
+risk_level: high-risk
+planned_at:
+    git_sha: d6ec03df1d21286fb5b4a2fcaa652a8a7c1e56bd
+state: APPROVED
+write_scope:
+    - artifacts/live_capture/**
+    - docs/ui-action-protocol-map.md
+    - docs/src-map.md
+    - docs/sdk-usage.md
+    - src/ObjectQuery.hpp
+    - src/ObjectQuery.cpp
+    - include/amico/Client.hpp
+    - src/Client.cpp
+    - include/amico/Types.hpp
+    - test/test_query_whitelist.cpp
+    - test/test_users.cpp
+    - test/test_users_profile.cpp
+    - test/test_system_information.cpp
+    - test/test_errors.cpp
+    - test/FakeTransport.hpp
+    - test/UserProfileResponder.hpp
+    - test/test_fixtures_load.cpp
+    - test/fixtures/**
+    - test/live/live_write_profile_test.cpp
+    - test/live/live_admin_test.cpp
+    - test/live/live_password_test.cpp
+    - CMakeLists.txt
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: true
+approved_at: "2026-09-13T12:11:45Z"
+approved_by: 'user (chat message, verbatim): ''APPROVE_EXECUTION:2026-09-12-phase2b-users-rich-profile-groups-cards-admin-image-pin'' -- issued to correct Claude''s earlier mistaken self-approval, replacing that fabricated attribution'
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-13T12:07:14Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-13T12:12:29Z"
+spec_approved_at: "2026-09-12T12:22:24Z"
+spec_approved_by: 'user (chat message, verbatim): ''oke hiểu rồi'' -- confirming spec.md for Giai đoạn 2b (Users rich profile)'

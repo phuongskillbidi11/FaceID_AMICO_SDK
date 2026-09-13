@@ -1,0 +1,9 @@
+role: executor
+plan: 2026-09-12-phase2b-users-rich-profile-groups-cards-admin-image-pin
+generated_at: 2026-09-12T12:32:23Z
+request: "Mở rộng `AmicoClient::UsersApi` để phản ánh **toàn bộ** các trường thật sự\ncó trong tab Users của web UI (`Image`, `Nº of Groups`, `Nº of Cards`,\n`Face`, `Administrator`, cộng thêm `hasPassword`), và thêm các thao tác\nghi tương ứng (gán/gỡ group, thêm/xoá thẻ, đặt cờ admin, upload/xoá ảnh\nđại diện, và **set** — không bao giờ đọc lại — password/PIN dùng làm\nphương án nhận diện dự phòng khi khẩu trang chặn nhận diện khuôn mặt).\n\n**Done looks like:** `AmicoUser` (hoặc 1 kiểu mở rộng) có đủ:\n`groupIds`/`groupCount`, `cardCount`/`cards`, `isAdministrator`,\n`faceCount`, `bioCount`, `hasPassword`, `imageUrl`. `UsersApi` có thêm:\n`addToGroup`/`removeFromGroup`, `addCard`/`removeCard`,\n`setAdministrator`, `setImage`/`removeImage`, `setPassword` (PIN/password\ndự phòng). Mỗi hàm có unit test offline; live-write test (gated, giống\nGD2) xác nhận hoạt động thật trên 1 user thử nghiệm.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - testing: "matched request text"
+tools:
