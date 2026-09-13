@@ -1,0 +1,30 @@
+plan: 2026-09-13-phase4-frontend
+risk_level: feature
+planned_at:
+    git_sha: d6ec03df1d21286fb5b4a2fcaa652a8a7c1e56bd
+state: APPROVED
+write_scope:
+    - frontend/index.html
+    - frontend/style.css
+    - frontend/app.js
+    - frontend/users.js
+    - frontend/access-logs.js
+    - frontend/system-info.js
+    - backend/main.cpp
+    - backend/BackendConfig.hpp
+    - docs/backend-api.md
+    - docs/src-map.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-13T13:13:01Z"
+spec_approved_at: "2026-09-13T13:08:13Z"
+spec_approved_by: 'user (chat message, verbatim): ''oke'' -- confirming spec.md for Giai đoạn 4 (frontend)'

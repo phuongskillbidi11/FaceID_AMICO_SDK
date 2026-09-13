@@ -9,6 +9,8 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 option(AMICO_BUILD_TESTS "Build offline unit tests and the gated live smoke test" ON)
 option(AMICO_BUILD_EXAMPLES "Build the per-operation example binaries" ON)
 
+option(AMICO_BUILD_BACKEND "Build the amico_backend HTTP API server and its tests" ON)
+
 find_package(CURL REQUIRED)
 find_package(nlohmann_json REQUIRED)
 
@@ -54,6 +56,7 @@ if(AMICO_BUILD_TESTS)
         test/test_system_information.cpp
         test/test_network_safety.cpp
         test/test_users.cpp
+        test/test_users_profile.cpp
         test/test_access_logs.cpp
         test/test_redaction.cpp
         test/test_query_whitelist.cpp
@@ -72,6 +75,60 @@ if(AMICO_BUILD_TESTS)
     add_executable(amico_live_smoke_test test/live/live_smoke_test.cpp)
     target_link_libraries(amico_live_smoke_test PRIVATE amico_sdk)
     target_include_directories(amico_live_smoke_test PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src)
+
+    add_executable(amico_live_write_test test/live/live_write_test.cpp)
+    target_link_libraries(amico_live_write_test PRIVATE amico_sdk)
+
+    add_executable(amico_live_write_profile_test test/live/live_write_profile_test.cpp)
+    target_link_libraries(amico_live_write_profile_test PRIVATE amico_sdk)
+    if(MSVC)
+        # This file's sample-image path is a UTF-8-encoded, non-ASCII
+        # (Vietnamese) string literal -- force MSVC to treat both the
+        # source file and the narrow-string execution charset as UTF-8,
+        # so the compiled literal's bytes match what
+        # utf8PathToWide()/MultiByteToWideChar(CP_UTF8, ...) expects.
+        target_compile_options(amico_live_write_profile_test PRIVATE /utf-8)
+    endif()
+
+    add_executable(amico_live_admin_test test/live/live_admin_test.cpp)
+    target_link_libraries(amico_live_admin_test PRIVATE amico_sdk)
+
+    add_executable(amico_live_password_test test/live/live_password_test.cpp)
+    target_link_libraries(amico_live_password_test PRIVATE amico_sdk)
+endif()
+
+if(AMICO_BUILD_BACKEND)
+    find_package(httplib CONFIG REQUIRED)
+
+    add_library(amico_backend_lib STATIC
+        backend/SessionStore.cpp
+        backend/Routes.cpp
+        backend/JsonMapping.cpp
+        backend/ErrorMapping.cpp
+    )
+    target_include_directories(amico_backend_lib PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/backend)
+    target_link_libraries(amico_backend_lib PUBLIC amico_sdk httplib::httplib)
+
+    add_executable(amico_backend backend/main.cpp)
+    target_link_libraries(amico_backend PRIVATE amico_backend_lib)
+
+    if(AMICO_BUILD_TESTS)
+        add_executable(amico_backend_tests
+            test/backend/test_routes.cpp
+        )
+        target_link_libraries(amico_backend_tests PRIVATE amico_backend_lib doctest::doctest)
+        target_include_directories(amico_backend_tests PRIVATE
+            ${CMAKE_CURRENT_SOURCE_DIR}/src
+            ${CMAKE_CURRENT_SOURCE_DIR}/test
+        )
+        target_compile_definitions(amico_backend_tests PRIVATE
+            AMICO_TEST_FIXTURES_DIR="${CMAKE_CURRENT_SOURCE_DIR}/test/fixtures"
+        )
+        add_test(NAME amico_backend_offline_tests COMMAND amico_backend_tests)
+
+        add_executable(amico_backend_live_smoke_test test/backend/live_backend_smoke_test.cpp)
+        target_link_libraries(amico_backend_live_smoke_test PRIVATE amico_backend_lib)
+    endif()
 endif()
 
 if(AMICO_BUILD_EXAMPLES)

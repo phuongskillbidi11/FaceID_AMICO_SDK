@@ -1,0 +1,13 @@
+role: executor
+plan: 2026-09-13-phase3-backend-api-layer
+generated_at: 2026-09-13T12:35:19Z
+request: "Build a small, standalone C++ HTTP server (`amico_backend`) that exposes\n`amico_sdk`'s existing `AmicoClient` API (Users CRUD + rich profile,\nAccess Logs, System Information) as a JSON HTTP API — a **thin,\nstateless proxy**: every request is served by calling straight through\nto the real AMICO device via `amico_sdk`, with no database, no cache,\nno business logic beyond what the SDK already implements. This becomes\nthe integration point Giai đoạn 4's frontend talks to, instead of the\nfrontend needing to embed/link the C++ SDK directly.\n\n**Done looks like:** `amico_backend` (new executable) starts up, logs\ninto the real device once using its own config (env vars, same pattern\nas existing examples), and serves HTTP+JSON routes 1:1 mirroring every\npublic method already on `AmicoClient`/`UsersApi`/`AccessLogsApi`.\nOffline integration tests drive the real HTTP server (bound to a\nloopback ephemeral port) against a `FakeTransport`-backed `AmicoClient`\n— no live device contact needed to verify routing/serialization/error-\nmapping. A live smoke test (gated, like every prior live test in this\nproject) confirms the whole stack against the real device once.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - cpp: "matched request text"
+  - testing: "matched request text"
+  - linux: "matched request text"
+  - debugging: "matched request text"
+tools:
+  - docs.search: allowed

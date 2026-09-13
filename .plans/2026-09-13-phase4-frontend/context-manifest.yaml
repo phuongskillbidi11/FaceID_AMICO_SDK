@@ -1,0 +1,12 @@
+role: executor
+plan: 2026-09-13-phase4-frontend
+generated_at: 2026-09-13T13:13:43Z
+request: "Build a single-page, plain HTML/CSS/JS frontend (no framework, no\nbuild step, no npm) covering everything `amico_backend` (Giai đoạn 3)\nalready exposes: **Users** (list/create/edit/remove, groups, cards,\nprofile image, Administrator flag, PIN), **Access Logs** (list), and\n**System Information** (single view). Served as static files directly\nby `amico_backend` itself — one process, one port, same-origin (no\nCORS, no second server to run).\n\n**Done looks like:** opening `http://<backend-host>:<port>/` in a\nbrowser shows a Users table matching the original request's column set\n(Image, Id, Name, Employee ID, Password, Start/End Date/Time, Nº of\nGroups, Nº of Cards, Face, Last Access Date/Time, Administrator, Edit,\nRemove), with working Add/Edit/Remove, group/card management, image\nupload (any common format, converted to JPEG client-side), and PIN set\n— plus tabs for Access Logs and System Information. Every write action\nthe backend gates behind `X-Confirm-Sensitive-Action` (Administrator,\npassword) requires an explicit confirmation dialog in the UI before\nthe request is sent — the frontend does not silently pre-supply that\nheader.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - linux: "matched request text"
+  - cross-compilation: "matched request text"
+  - reverse-engineering: "matched request text"
+  - tcp-ip: "matched request text"
+tools:

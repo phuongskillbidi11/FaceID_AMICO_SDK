@@ -1,0 +1,7 @@
+role: plan-reviewer
+plan: 2026-09-13-phase5-real-login-dynamic-device
+generated_at: 2026-09-13T13:48:48Z
+request: "Replace `amico_backend`'s fixed, env-var-configured, always-on device\nconnection (Giai đoạn 3's Decision 2) with a **real login flow**: the\nfrontend shows a login page (visually modeled on the real AMICO\ndevice's own `login.html`) asking for **Device IP, Username, Password**\n— submitting these calls the real device's own login, and only on\nsuccess does the backend become usable. The system manages **one\ndevice at a time**, chosen at login (not a fixed device baked in at\nbackend startup, and not a multi-device fleet dashboard). A real\nbackend-issued session cookie gates every other route — without it,\nthe API returns 401, not just \"whichever device happened to be\nconfigured.\"\n\n**Done looks like:** opening the frontend shows a login form (Device\nIP/URL, Username, Password, Remember, Log In). Submitting valid\ncredentials for a reachable device logs in for real (the device\nrejects bad credentials exactly as it always has) and reveals the\nexisting Users/Access Logs/System Information tabs, now operating\nagainst whatever device was just logged into. A Logout action ends the\nsession (both the backend's own session cookie and the underlying\ndevice session) and returns to the login form. No route works before a\nsuccessful login.\n\n---"
+risk_level: high-risk
+requires_approval: true
+project_sections:

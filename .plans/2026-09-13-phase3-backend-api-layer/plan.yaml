@@ -1,0 +1,39 @@
+plan: 2026-09-13-phase3-backend-api-layer
+risk_level: high-risk
+planned_at:
+    git_sha: d6ec03df1d21286fb5b4a2fcaa652a8a7c1e56bd
+state: APPROVED
+write_scope:
+    - vcpkg.json
+    - CMakeLists.txt
+    - backend/main.cpp
+    - backend/Routes.hpp
+    - backend/Routes.cpp
+    - backend/JsonMapping.hpp
+    - backend/JsonMapping.cpp
+    - backend/ErrorMapping.hpp
+    - backend/ErrorMapping.cpp
+    - backend/BackendConfig.hpp
+    - test/backend/test_routes.cpp
+    - test/backend/live_backend_smoke_test.cpp
+    - docs/backend-api.md
+    - docs/src-map.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: true
+approved_at: "2026-09-13T12:34:50Z"
+approved_by: 'user (chat message, verbatim): ''APPROVE_EXECUTION:2026-09-13-phase3-backend-api-layer'' -- issued after genuine Plan Reviewer PASS (pass 2)'
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-13T12:34:15Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-13T13:00:35Z"
+spec_approved_at: "2026-09-13T12:29:22Z"
+spec_approved_by: 'user (chat message, verbatim): ''oke'' -- confirming spec.md for Giai đoạn 3 (backend API layer)'

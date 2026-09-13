@@ -1,0 +1,41 @@
+plan: 2026-09-13-phase5-real-login-dynamic-device
+risk_level: high-risk
+planned_at:
+    git_sha: d6ec03df1d21286fb5b4a2fcaa652a8a7c1e56bd
+state: APPROVED
+write_scope:
+    - backend/SessionStore.hpp
+    - backend/SessionStore.cpp
+    - backend/BackendConfig.hpp
+    - backend/Routes.hpp
+    - backend/Routes.cpp
+    - backend/main.cpp
+    - frontend/index.html
+    - frontend/login.js
+    - frontend/app.js
+    - test/backend/test_routes.cpp
+    - test/backend/live_backend_smoke_test.cpp
+    - docs/backend-api.md
+    - docs/src-map.md
+    - CMakeLists.txt
+    - .plans/2026-09-13-phase5-real-login-dynamic-device/DECISION_LOG.md
+    - .plans/2026-09-13-phase5-real-login-dynamic-device/sprint-summary.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: true
+approved_at: "2026-09-13T13:52:37Z"
+approved_by: 'user (chat message, verbatim): ''APPROVE_EXECUTION:2026-09-13-phase5-real-login-dynamic-device'''
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-13T13:56:47Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-13T14:17:14Z"
+spec_approved_at: "2026-09-13T13:43:00Z"
+spec_approved_by: 'user (chat message, verbatim): ''oke nha'' -- confirming spec.md for Giai đoạn 5 (real login + dynamic device targeting)'
