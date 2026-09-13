@@ -17,3 +17,11 @@
 {"type":"verified","at":"2026-09-12T09:26:58Z","detail":"FAIL"}
 {"type":"verified","at":"2026-09-12T09:28:11Z","detail":"FAIL"}
 {"type":"verified","at":"2026-09-12T09:30:38Z","detail":"PASS"}
+{"type":"verified","at":"2026-09-12T09:32:01Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-12T09:32:34Z","detail":"NEEDS_REPLAN"}
+{"at":"2026-09-12T09:33:23Z","context_manifest":"context-manifest-planner.yaml","role":"planner","state":"NEEDS_REPLAN","type":"role_activated"}
+{"type":"state_changed","at":"2026-09-12T09:34:08Z","detail":"PLANNED"}
+{"type":"reviewed","at":"2026-09-12T09:34:49Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-12T09:34:50Z","detail":"REVIEWED"}
+{"type":"state_changed","at":"2026-09-12T09:35:00Z","detail":"APPROVED"}
+{"type":"state_changed","at":"2026-09-12T09:35:23Z","detail":"NEEDS_REPLAN"}

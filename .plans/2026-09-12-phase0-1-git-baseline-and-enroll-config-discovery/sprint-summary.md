@@ -16,20 +16,24 @@
 | Sprint name | Giai đoạn 0+1 — Git baseline + Enroll/config discovery |
 | Plan folder | `.plans/2026-09-12-phase0-1-git-baseline-and-enroll-config-discovery/` |
 | Start date | 2026-09-12 |
-| End date | 2026-09-12 |
-| Tests | Groups 1–4: F-1–F-5 all Pass, R-1/R-2 all Pass. Group 5 (F-6): Not run this cycle. |
+| End date | 2026-09-13 |
+| Tests | Groups 1–4: F-1–F-5 all Pass, R-1/R-2 all Pass. Group 5 (F-6): Pass, 2026-09-13, live read-only. |
 
 ---
 
 ## Outcome
 
-**Status:** [x] Complete (Groups 1–4 scope) / [ ] Partial / [ ] Abandoned
+**Status:** [x] Complete (Groups 1–5, full scope) / [ ] Partial / [ ] Abandoned
 
-**Note:** Group 5 (Enroll page live discovery) was never approved this
-cycle — it remains gated behind a fresh, distinct live-device-contact
-approval message per spec.md Decision 5, and this sprint's "Complete"
-status refers only to the Groups 1–4 scope that was actually authorized
-and executed.
+**Note:** Group 5 (Enroll page live discovery) was completed 2026-09-13
+after the user issued a fresh, distinct `APPROVE_LIVE_DEVICE_TEST`
+approval. Finding: "Enroll" is a sidebar menu-section header, not a
+navigable page — confirmed independently live (this session) and
+cross-referenced against a more thorough prior discovery already done
+under the separate `phase1b-remaining-ui-discovery-enroll-areas-
+license-datetime-export` plan, whose "Giai đoạn 1b pass" had already
+fetched and statically documented the real per-user enrollment handler
+(`newusers.js`, 7 commands). See `DECISION_LOG.md` for full detail.
 
 ### What was built (matches tasks.md `[x]` items)
 - **Git baseline established.** `.gitignore` fixed first (added
@@ -57,10 +61,29 @@ and executed.
   `user_list_images` resolved as existing-user-photo export (backup ZIP),
   **not** the Enroll page's own capture flow.
 
+- **Group 5 — Enroll page live discovery (2026-09-13).** Logged in
+  read-only against `192.168.2.156`; found "Enroll" is a static
+  `<span class="title">Enroll</span>` menu-section header (confirmed
+  via `evaluate_script`), not a distinct page — clicking it only
+  expands/collapses the already-documented Users/Visitors/Visits/
+  Groups/Time Zones/Holidays/Scheduled Unlock/User Types/Custom Fields
+  links. Confirmed via `list_network_requests` (only `main.js`/
+  `index.js` loaded) and a fresh fetch of `main.js` (`grep -i enroll`:
+  zero matches, saved to `artifacts/live_capture/
+  main_js.network-response`). Screenshot: `captures/screenshots/
+  p1_12_enroll_menu_expanded.png`. This independently reconfirms (a
+  second time, a different session) the exact same finding already
+  documented in far more depth under the separate
+  `phase1b-remaining-ui-discovery-enroll-areas-license-datetime-export`
+  plan's `docs/ui-action-protocol-map.md` "Enroll (Face/Card/PIN/
+  Fingerprint)" section — no new artifact duplication was needed;
+  cross-referenced instead. Logged out at the end, read-only discipline
+  maintained throughout (no enroll/capture/save/submit control ever
+  clicked).
+
 ### What was skipped or deferred
 | Item | Reason | Deferred to |
 |------|--------|------------|
-| Group 5 — Enroll page live discovery | No `APPROVE_LIVE_DEVICE_TEST`-style fresh approval message issued this cycle | Next: whenever the user issues that approval |
 | `artifacts/ui-action-map.json` sync for the 48 new commands | Schema mismatch (per-live-action vs. per-static-command prose) — recorded as an explicit no-op, not silently skipped | Only if a future need for machine-readable form arises |
 
 ---
@@ -111,10 +134,10 @@ and executed.
 
 ## What the next sprint must NOT assume
 
-- The Enroll (Face/Card) page has **not** been visited or documented in
-  this cycle — `docs/ui-action-protocol-map.md`'s "Gaps not resolved this
-  pass" section entry for it is still accurate until Group 5 actually
-  runs.
+- The Enroll page investigation is fully closed as of 2026-09-13 — there
+  is **no** standalone Enroll page/URL/JS to ever look for again; it is
+  conclusively a menu-section header only, confirmed twice
+  independently (this plan and `phase1b-remaining-ui-discovery`).
 - The git baseline now exists (`27c035b`, `744617b` on top of `2ff9b0e`)
   — future plans should use normal `git diff`/`git status` against these
   commits, not content-hash workarounds.
@@ -122,3 +145,16 @@ and executed.
   17 `actions` entries are still only the original P1-era `LIVE_CONFIRMED`
   set, not the 48 new static-only commands (those live in
   `docs/ui-action-protocol-map.md` prose only).
+- **`KNOWN_HARNESS_BUG`** (see `DECISION_LOG.md`'s 2026-09-12 entry):
+  tracked `.plans/**` can trigger a self-induced `PLAN_DRIFT_DETECTED`
+  loop, because `eng plan drift` and `eng verify` apply `write_scope`
+  with opposite semantics while the Harness mutates its own runtime
+  files. This is a Harness bug, not an AMICO implementation defect —
+  `eng verify` already returned genuine `Verdict: PASS` for this plan's
+  Groups 1–4 before the loop was discovered. This plan's mechanical
+  `state:` is stuck at `NEEDS_REPLAN` as a result; do **not** hand-edit
+  it to `COMPLETED`, do **not** untrack `.plans/`, and do **not** attempt
+  a Harness fix from within an AMICO plan — it is deferred to a separate
+  session against the Harness's own repo. The next sprint should **not**
+  assume this plan reached `COMPLETED` in `plan.yaml`, only that its
+  actual technical scope (Groups 1–4) is done and verified.

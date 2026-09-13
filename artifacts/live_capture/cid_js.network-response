@@ -1,0 +1,1298 @@
+var qrcode_alpha = Main.isQRCodeModeAlpha();
+(function(){
+
+	var CID = function() {};
+	CID.fn = CID.prototype;
+	CID.fn.listClass = [];
+
+	CID.createClass = makeClass;
+	CID.AlertError = AlertError;
+
+	window.CID = CID;
+	return CID;
+
+
+	function makeClass(_data){
+		var data = jQuery.extend(true, {}, _data);
+		var CidObject = function(){
+			this.isLoaded = false;
+			this.valuesDefault = {};
+			this.values = {};
+			this.functionsValues = {};
+			for(var key in this.fields){
+				if(this.fields[key].type === 'list' || this.fields[key].type === 'listEdit'){
+					this.values[key] = null;
+					this.valuesDefault[key] = [].concat(this.fields[key].value);
+				}else{
+					this.values[key] = this.fields[key].value
+					this.valuesDefault[key] = this.fields[key].value;
+				}
+			}
+
+			for(var key in this.functions){
+				this.functionsValues[key] = null;
+			}
+		};
+
+		CidObject.fn = CidObject.prototype;
+		var $ = CidObject.fn;
+		$.objectName = data.name;
+		$.object = data.object;
+		$.class = data.form || data.object;
+		$.defaultWhere = data.defaultWhere || function(where) { return where;};
+		$.order = data.order || ['name'];
+		$.foreign_key = data.foreign_key;
+		$.fields = {};
+		$.dbFields = [];
+		$.noSave = data.noSave || [];
+		$.functions = {};
+		$.defineNewSave = data.save || null;
+		$.modal = data.modal;
+		$.filters = data.filters;
+		$.validateBeforeSave = data.validateBeforeSave || null;
+		$.modalCallback = data.modalCallback || null;
+
+		$.defineNewField = function(values){
+			var that = this;
+			for(var key in values){
+				//this.valuesDefault[key] = undefined;
+
+				this.fields[key] = values[key];
+				var config = this.fields[key];
+
+				if(!('type' in config))
+					config.type = 'text';
+				/*else if(config.type === 'list' || config.type === 'listEdit' ){
+					if(!Array.isArray(config.value))
+						config.value = {};
+				}*/
+
+				if(!('show' in  config))
+					config.show = true;
+
+				if(!('showTable' in  config))
+					config.showTable = config.show;
+
+				if(!('not_null' in  config))
+					config.not_null = false;
+
+				if(!('label' in  config))
+					config.label = key;
+
+				if(!('PK' in  config))
+					config.PK = false;
+				else if(config.PK === true)
+					this.PK = key;
+
+				if(!('description' in  config))
+					config.description = false;
+				else if(config.description === true)
+					this.description = key;
+
+				if('get' in config)
+					config.value = null;
+				else if(!('value' in  config))
+					config.value = '';
+
+				if(!('isField' in config))
+					config.isField = true;
+
+				if(!('enabled' in config))
+					config.enabled = true;
+
+				if(!('noSave' in config))
+					config.noSave = {};
+
+				if (!('defaultWhere' in config))
+					config.defaultWhere = function(where) {return where;};
+
+				if(config.isField === true)
+					this.dbFields.push(key);
+
+				Object.defineProperty(
+					this,
+					key,
+					{
+						get : new Function('return function(){ return this.getValue("' + key + '"); }')(),
+						set : new Function('return function(value) {  return this.setValue("'+key+'", value); }')()
+					}
+				);
+			}
+		};
+
+		$.run = function(func){
+			var result = this.functionsValues[func];
+			if(result === null){
+				result = this.functions[func](this);
+				this.functionsValues[func] = result;
+			}
+			return result;
+		};
+
+		$.defineNewFunction = function(funcs){
+			for(var func in funcs){
+				this.functions[func] = funcs[func];
+				Object.defineProperty(
+					this,
+					func,
+					{
+						get : new Function('return function(){ return this.run("' + func + '"); }')(),
+					}
+				);
+			}
+		};
+
+		$.defineNewField(data.fields);
+
+		if(data.functions)
+			$.defineNewFunction(data.functions);
+
+		$.verifyData = function(){
+			var id = this.getValue(this.PK);
+			var name = this.getValue(this.description);
+			if(id == null || id === '' || id === 0){
+				this.setValue(this.description, '(Not recognized)');
+			}else if(name == null || name == '' || name.length <= 0)
+				this.setValue(this.description, '(id: '+ id + ')');
+		};
+
+		$.reverseData = function(){
+			var id = this.getValue(this.PK);
+			var name = this.getValue(this.description);
+			if(name === '(Not recognized)' || name === '(id: '+ id + ')')
+				this.setValue(this.description, '');
+		};
+
+		$.getValue = function(){
+			if(!this.values){
+				return;
+			}
+			var that = this;
+			if(arguments.length === 1){
+				return value(arguments[0]);
+			}else if(arguments.length === 0){
+				var lstValues = {};
+				for(var key in this.values){
+					if(['list', 'listEdit'].indexOf(that.fields[key].type) === -1)
+						lstValues[key] = value(key);
+				}
+				return lstValues;
+			}else{
+				var lstValues = {};
+				for(var key in arguments)
+					lstValues[key] = value(key);
+				return lstValues;
+			}
+
+			function value(key){
+				var value = that.values[key];
+				var valueIsNull = value === null || value === '';
+
+				if(value === null && 'get' in that.fields[key]){
+					value = that.fields[key].get(that);
+					that.values[key] = value;
+					that.valuesDefault[key] = value;
+				}
+
+				if(key && valueIsNull === true){
+					if(that.fields[key].type === 'fields' && that.fields[key].fieldType === 'single') {
+						var temp = new window[key]();
+						if (!that.fields[key].fieldId)
+							temp.load({'object': that, 'async' : false});
+						else {
+							temp.load({'value': that.getValue(that.fields[key].fieldId), 'async' : false});
+							//temp.load({'value' : that.getValue(that.fields[key].fieldId), 'async' : false});
+						}
+						//temp.setValue(temp.PK, that.getValue(that.fields[key].fieldId));
+						value = temp;
+						that.values[key] = value;
+						that.valuesDefault[key] = value;
+					}else if(that.fields[key].type === 'object'){// && that.fields[key].isField === false){
+
+						var temp = new window[that.fields[key].object]();
+						temp.load({'value' : value, 'async' : false});
+						temp.setValue(temp.PK, value);
+						value = temp;
+						that.values[key] = value;
+						that.valuesDefault[key] = value;
+					}else if(that.fields[key].type === 'list' || that.fields[key].type === 'listEdit'){
+						var lst = {};
+						window[key].fn.list({
+							'object' : that,
+							'async' : false,
+							'defaultWhere': that.fields[key].defaultWhere,
+							'callback' : function(_lst, finish){
+								_lst.forEach(function(item){
+									lst[item.getValue(item.PK)] = item;
+								});
+								if(finish === true){
+									value = lst;
+									that.values[key] = lst;
+									//that.valuesDefault[key] = lst;
+								}
+							}
+						});
+					}
+				}
+
+
+				if(that.fields[key] && 'afterGet' in that.fields[key]){
+					value = that.fields[key].afterGet(that, value);
+				}
+
+				/*else{
+					if(that.fields[key].description === true){
+						if(that.values[that.PK] == '')
+							value = '(não identificado)';
+						else if(value == '')
+							value = '(id:'+ that.getValue(that.PK) +')';
+					}
+				}*/
+				if(key === 'api_object_commands')
+					console.log(value)
+				return value;
+			}
+		};
+
+		$.setDefaultValue = function(){
+			var that = this;
+
+			function addValue(key, value){
+				if(key in that.values){
+					//if(that.valuesDefault[key] === undefined)
+						that.valuesDefault[key] = value;
+				}
+			};
+
+			if(arguments.length === 1){
+				var values = arguments[0];
+				for(var key in values) {
+					addValue(key, values[key]);
+				}
+			}else{
+				for(var i = arguments.length - 1; i >= 0; i-=2){
+					addValue(arguments[i-1], arguments[i]);
+				}
+			}
+		};
+
+		$.setValue = function(){
+			var that = this;
+
+			function addValue(key, value){
+				if(key in that.values){
+					if('set' in that.fields[key])
+						value = that.fields[key].set(that, value);
+					switch(that.fields[key].type){
+						case 'int':
+							if (value == "") {
+								value = 0;
+							}
+							else if(!isNaN(value)) {
+								value = parseInt(value);
+							}
+							break;
+						case 'BigInt':
+							if (value == "") {
+								value = 0;
+							}
+							// TODO serializar toda BigInt realmente como BigInt
+							if(key == 'id' || key == 'user_id' || key == 'visitor_id' || key == 'host_id'){
+								value = BigInt(value);
+							}
+							break;
+					}
+					that.values[key] = value;
+				}
+			};
+
+			if(arguments.length === 1){
+				var values = arguments[0];
+				for(var key in values) {
+					addValue(key, values[key]);
+				}
+			}else{
+				for(var i = arguments.length - 1; i >= 0; i-=2){
+					addValue(arguments[i-1], arguments[i]);
+				}
+			}
+		};
+
+		Messenger(CidObject);
+
+		window[data.form || data.object] = CidObject;
+		CID.fn.listClass.push(data.form || data.object);
+		return CidObject;
+	};
+
+
+	function Messenger(obj){
+		obj.fn.validate = function(values){
+
+			var lstResult = [];
+			var lstValues;
+			if(values == null)
+				lstValues = this.values;
+			else
+				lstValues = values;
+
+			for(key in lstValues){
+				var config = this.fields[key];
+				if (config === undefined) {
+					console.log("config undefined for key: " + key)
+					continue
+				}
+				if(config.not_null === true){
+					if(lstValues[key] === '' || lstValues[key] === null || lstValues[key] === undefined){
+						lstResult.push(config.label + ' cannot be empty');
+					}
+				}
+
+				if('mask' in config && lstValues[key] != ''){
+					var mask = config.mask
+						.replace(new RegExp('9', 'g'), '?[0-9]')
+						.replace(new RegExp('0', 'g'), '[0-9]')
+						.replace(new RegExp('S', 'g'), '[A-Za-z]')
+						.replace(new RegExp('A', 'g'), '[A-Za-z0-9]');
+
+					var reg = new RegExp(mask);
+					if(!reg.test(lstValues[key]))
+						lstResult.push(config.label + ': wrong format');
+				}
+
+				switch(config.type){
+					case 'text':
+					break;
+
+					case 'time':
+						if (lstValues[key] !== '' || config.not_null) {
+							if (isNaN(lstValues[key]))
+								lstResult.push(config.label + ' is not a valid time');
+							else
+								lstValues[key]= parseInt(lstValues[key]);
+						}
+					break;
+
+					case 'date':
+					if(isNaN(lstValues[key]))
+							lstResult.push(config.label + ' is not a valid date');
+						else
+							lstValues[key]= parseInt(lstValues[key]);
+					break;
+
+					case 'int':
+						if(lstValues[key] != "") {
+							var numValue = typeof lstValues[key] === 'bigint' ? Number(lstValues[key]) : lstValues[key];
+							if(isNaN(numValue)) {
+								lstResult.push(config.label + ' is not a valid number');
+							} else if(config.not_null === true) {
+								lstValues[key] = parseInt(numValue);
+							}
+						}
+					break;
+
+					case 'BigInt':
+						if(lstValues[key] != "") {
+							if(typeof lstValues[key] !== 'bigint') {
+								try {
+									lstValues[key] = BigInt(lstValues[key]);
+								} catch(e) {
+									lstResult.push(config.label + ' is not a valid number');
+								}
+							}
+						} else if(config.not_null === true) {
+							lstResult.push(config.label + ' cannot be empty');
+						}
+					break;
+
+					case 'posInt':
+						if(lstValues[key] != "" && isNaN(lstValues[key])) {
+							lstResult.push(config.label + ' is not a valid number');
+						}
+						else if (!isNaN(lstValues[key]) && lstValues[key] <= 0) {
+							lstResult.push(config.label + ' must be greater than zero');
+						}
+						else if(config.not_null === true) {
+							lstValues[key] = parseInt(lstValues[key]);
+						}
+					break;
+
+					case 'card_code':
+						if (typeof lstValues[key] === "bigint") {}
+						else if(lstValues[key] != "" && isNaN(lstValues[key])) {
+							lstResult.push(config.label + ' is not a valid number');
+						}
+						else if (!isNaN(lstValues[key]) && lstValues[key] == 0) {
+							lstResult.push(config.label + ' can not be zero');
+						}
+						else if(config.not_null === true) {
+							lstValues[key] = parseInt(lstValues[key]);
+						}
+					break;
+				}
+			}
+
+			return lstResult;
+		};
+
+		obj.fn.remove = function(){
+
+			var data = this.makeJSONdata(arguments);
+
+			data.command = 'destroy_objects';
+			data.Json.where.push({
+				'object' : this.object,
+				'field' : this.PK,
+				'value' : this.getValue(this.PK)
+			});
+
+			this.sendJson(data);
+		};
+
+		obj.fn.save = function(){
+			var error = this.validate();
+
+			//Chama custom validate
+			if (error.length === 0 && this.validateBeforeSave !== null)
+				error = this.validateBeforeSave(this);
+
+			if(error.length === 0){
+				var that = this;
+				var data = this.makeJSONdata(arguments);
+				data.Json.values = {};
+				var afterSave = [];
+				var previous_pk = null;
+				//Save
+				for(var key in that.fields){
+					var field = that.fields[key];
+					var value = that.getValue(key);
+
+					if (field.PK === true)
+						previous_pk = that.valuesDefault[key];
+					if(field.type === 'fields' || (that.isLoaded === false && field.PK === false) || value != that.valuesDefault[key]){
+						if('save' in field){
+							field.save(that, value);
+							break;
+						}
+						if('afterSave' in field){
+							if (value === null)
+								afterSave.push([field.afterSave, that.valuesDefault[key]]);
+							else
+								afterSave.push([field.afterSave, value]);
+						}
+
+						if('beforeSave' in field)
+							value = field.beforeSave(that, value);
+
+						if(field.isField === true){
+							if(field.type === 'boolean')
+								data.Json.values[key] = value === true ? 1 : 0;
+							else
+								data.Json.values[key] = value;
+						}
+					}
+
+					if (field.type === 'image') {
+						function facialErrorToStr(error) {
+							switch (error.code) {
+								case 0: // UNKNOWN
+									return "An unknown error has occurred";
+								case 1: // FAIL
+									return "Enrollment failed: " + error.message;
+								case 2: // FACE_NOT_DETECTED
+									return "Face not detected";
+								case 3: // FACE_EXISTS:
+									return "Face already enrolled";
+								case 4: // FACE_NOT_CENTERED:
+									return "Face not centered";
+								case 5: // FACE_TOO_DISTANT:
+									return "Face too distant";
+								case 6: // FACE_TOO_CLOSE:
+									return "Face too close";
+								case 7: // FACE_POSE_NOT_CENTERED:
+									return "Face pose not centered or not looking to the camera";
+								case 8: // FACE_LOW_SHARPNESS:
+									return "Low image face enroll quality";
+								case 9: // FACE_TOO_CLOSE_TO_BORDERS:
+									return "Face is too close to image borders";
+								case 10: // FACE_MASK_NOT_ALLOWED:
+									return "Face mask is not allowed on this operation mode";
+								case 11: // FACE_IMAGE_GRAYSCALE:
+									return "Face is in grayscale";
+								case 12: // FACE_IMAGE_GRAYSCALE:
+									return "Multiple faces in image";
+							}
+						}
+
+						function buildUserImageErrorHTML(errors) {
+							var errorStr = "Error while saving user image: <br/><br/>";
+							errorStr += "<ul>";
+							for (const error of errors) {
+								errorStr += "<li>" + facialErrorToStr(error) + "</li>";
+								if (error.info) {
+									errorStr += "<ul>";
+									for (const info in error.info)
+										errorStr += "<li>" + info + ": " + error.info[info] + "</li>";
+									errorStr += "</ul>";
+								}
+							}
+							errorStr += "</ul>";
+							return errorStr;
+						}
+
+						afterSave.push([
+							function(obj, field){
+								if (typeof btFoto != 'undefined' && btFoto != null) {
+									if (btFoto.length == 1 && btFoto[0] == 1) {
+										MessengerUtil.send('user_destroy_image', {'user_id': obj.id});
+										// For [Pro 15k / Pro 30k / don't keep user image] modes
+										MessengerUtil.send('destroy_objects', { object: 'face_templates', where: { face_templates: { user_id: obj.id } } });
+									}
+									else {
+										var timestamp = parseInt(new Date().getTime()/1000);
+										var res = MessengerUtil.sendFile('user_set_image', btFoto, 'user_id=' + obj.id + '&match=1' + '&timestamp=' + timestamp);
+										if (res.error) {
+											AlertError({ message: "Error while saving user image: " + res.error });
+										}
+										else if (res.success == false && res.errors != undefined) {
+											var errorStr = 	buildUserImageErrorHTML(res.errors);
+											AlertError({ message: errorStr });
+										}
+									}
+									btFoto = null;
+								}
+
+
+								function save_PIN (pin_value, user_id) {
+									if (!(pin_value === "" || (!isNaN(pin_value) && parseInt(pin_value) >= 0 && pin_value !== "001818"))) {
+										AlertError({ message: "PIN in invalid format (must be numeric)" });
+										return;
+									}
+
+									var data_load = MessengerUtil.send(
+										"load_objects",
+										{
+											'object' : 'pins',
+											'fields' : ['user_id'],
+											'where' : [{
+												'object' : 'pins',
+												'field' : 'value',
+												'value' : pin_value
+											}]
+										}, null, true
+									);
+									if (data_load.pins.length > 0) {
+										if (parseInt(data_load.pins[0].user_id) !== parseInt(user_id)) {
+											AlertError({ message: "The requested PIN is already in use" });
+										}
+										// if the user_id's are equal, there is nothing to do as well
+										return;
+									}
+
+									// this routine will delete an old pin from this user (if it exists) and create the new one
+
+									var data_destroy = MessengerUtil.send(
+										"destroy_objects",
+										{
+											'object' : 'pins',
+											'where' : [{
+												'object' : 'pins',
+												'field' : 'user_id',
+												'value' : user_id
+											}]
+										}, null, true
+									);
+									if (data_destroy.error) {
+										AlertError({ message: "There was an error saving the PIN" });
+										return;
+									}
+
+									if (pin_value === "") {
+										// nothing else to do after destroy_objects
+										return;
+									}
+
+									var data_create = MessengerUtil.send(
+										"create_objects",
+										{
+											'object' : 'pins',
+											'values' : [{
+												'value' : pin_value,
+												'user_id' : user_id,
+											}]
+										}, null, true
+									);
+									if (data_create.error) {
+										AlertError({ message: "There was an error saving the PIN" });
+									}
+								} // function save_PIN
+
+
+								if (obj.values.pin !== undefined && obj.values.pin !== null) {
+									save_PIN(obj.values.pin, obj.id);
+								}
+
+								function save_customThreshold(custom_threshold, user_id) {
+									if (isNaN(custom_threshold) || parseInt(custom_threshold) > 9999 || parseInt(custom_threshold) < 0) {
+										AlertError({ message: "Custom threshold value should range between 0 (deactivated) and 9999" });
+										return;
+									}
+
+									if (custom_threshold === "" || parseInt(custom_threshold) === 0) {
+										var data_destroy = MessengerUtil.send(
+											"destroy_objects",
+											{
+												'object' : 'custom_thresholds',
+												'where' : [{
+												'object' : 'custom_thresholds',
+												'field' : 'user_id',
+												'value' : user_id
+												}]
+											}, null, true
+										);
+										if (data_destroy.error) {
+											AlertError({ message: "Error while saving custom threshold" });
+										}
+										return;
+									}
+
+									var threshold = parseInt(custom_threshold);
+
+									var data_load = MessengerUtil.send(
+										"load_objects",
+										{
+											'object' : 'custom_thresholds',
+											'where' : [{
+												'object' : 'custom_thresholds',
+												'field' : 'user_id',
+												'value' : user_id
+											}]
+										}, null, true
+									);
+									if (data_load.error) {
+										AlertError({ message: "Error while saving custom threshold" });
+										return;
+									}
+
+									if (data_load.custom_thresholds.length > 0) {
+										var data_modify = MessengerUtil.send(
+											"modify_objects",
+											{
+												'object' : 'custom_thresholds',
+												'fields' : ['threshold'],
+												'where' : [{
+													'object' : 'custom_thresholds',
+													'field' : 'user_id',
+													'value' : user_id
+												}],
+												'values' : {
+												'threshold' : threshold
+												}
+											}, null, true
+											);
+										if (data_modify.error) {
+											AlertError({ message: "Error while saving custom threshold" });
+										}
+									}
+									else {
+										var data_create = MessengerUtil.send(
+											"create_objects",
+											{
+												'object' : 'custom_thresholds',
+												'values' : [{
+												'threshold' : threshold,
+												'user_id' : user_id,
+												}]
+											}, null, true
+										);
+										if (data_create.error) {
+											AlertError({ message: "Error while saving custom threshold" });
+										}
+									}
+								}
+
+								if (obj.values.customThreshold !== undefined && obj.values.customThreshold !== null) {
+									save_customThreshold(obj.values.customThreshold, obj.id);
+								}
+							}
+						, key]);
+						//a = this;
+						/* if (btFoto.length == 1 && btFoto[0] == 1)
+							MessengerUtil.send('user_destroy_image', {'user_id' : this.getId() });
+						else
+							MessengerUtil.sendFile('user_set_image', bytesFoto, 'user_id='+this.getId());*/
+					}
+
+
+					if(field.type === 'listEdit'){
+						afterSave.push([
+							function(obj, field){
+								if(!(field ==="qrcodes" && !qrcode_alpha)) {
+									var lstObjects = obj.getValue(field);
+									lstObjects.forEach(function(obj){
+										if(obj.add === true){
+											if(obj.new === true && obj.object.getValue(obj.object.PK) < 0)
+													obj.object.setValue(obj.object.PK, 0);
+											obj.object.save();
+										}
+										else
+											obj.object.remove();
+									});
+								}
+							}
+						, key]);
+					}else if(field.type === 'fields'){
+						if(field.fieldType === 'single'){
+							afterSave.push([
+								function(obj, field){
+									var value = obj.getValue(field);
+									value.save();
+								}
+							, key]);
+						}else{
+							afterSave.push([
+								function(obj, field){
+									var value = obj.getValue(field);
+									value.forEach(function(obj){
+										if(obj.add === true){
+											if(obj.new === true && obj.object.getValue(obj.object.PK) < 0)
+												obj.object.setValue(obj.object.PK, 0);
+											obj.object.save();
+										}else if(obj.new === false && obj.add === false){
+											obj.object.remove();
+										}
+									});
+								}
+							, key]);
+
+						}
+					}else if(field.type === 'list'){
+						afterSave.push([
+							function(obj, field){
+								var config = obj.fields[field];
+								var lstbyObjects = [];
+								var lstValues = [];
+								var lst = obj.getValue(field);
+								for(var key in lst){
+									var item = lst[key];
+									if(item.isNew === true){
+										lstValues.push(item);
+									}
+								}
+
+								if(lstValues.length === 0)
+									return false;
+
+
+								if(config.listBy){
+									window[config.listBy].fn.list({ 'async' : false, 'object' : obj, 'defaultWhere' : config.defaultWhere }, function(lst, finish){
+										lstbyObjects = lstbyObjects.concat(lst);
+										if(finish === true){
+											if(lstbyObjects.length === 0){
+												var newObj = new window[config.listBy]();
+												newObj.setValue(newObj.description, '(' + newObj.object + ' automatically created for ' + obj.object + ' ' + obj.getValue(obj.PK) + ')');
+												newObj.save({'async' : false});
+												lstbyObjects.push(newObj);
+												lstbyObjects.forEach(function(item){
+													obj.fields[field].intermediateTableBy.forEach(function(inTable){
+														var lstId;
+														if(inTable.pkCallback)
+															lstId = inTable.pkCallback(obj);
+														else
+															lstId = [obj.getValue(obj.PK)];
+														lstId.forEach(function(id){
+															var data = {};
+															data.command = 'create_objects';
+															data.async = true;
+															data.Json ={};
+															data.Json.object = inTable.table;
+															var dataValues = {};
+															dataValues[inTable.pk] = id;
+															dataValues[inTable.fk] = item.getValue(item.PK);
+															data.Json.values = [dataValues];
+															obj.sendJson(data);
+														});
+													});
+												});
+											}
+										}
+									});
+								}
+								else {
+									lstbyObjects.push(that);
+								}
+								var hasAdd = false;
+								if(config.intermediateTable){
+
+									lstbyObjects.forEach(function(objBy){
+										var lstAdd = [];
+										var lstRemove = [];
+										for(var key in lstValues){
+											var item = lstValues[key];
+											if(item.isNew === true){
+												if(item.isSelected === true){
+													var dataValues = {};
+													dataValues[config.intermediateTable.pk] = objBy.getValue(objBy.PK);
+													dataValues[config.intermediateTable.fk] = item.object.getValue(item.object.PK);
+													lstAdd.push(dataValues);
+													hasAdd = true;
+												}
+												else
+													lstRemove.push(item.object.getValue(item.object.PK));
+											}
+										}
+
+										if(lstAdd.length > 0){
+											var data = {};
+											data.command = 'create_objects';
+											data.async = true;
+											data.Json ={};
+											data.Json.object = config.intermediateTable.table;
+											data.Json.values = lstAdd;
+											obj.sendJson(data);
+										}
+
+										if(lstRemove.length > 0){
+											var data = {};
+											data.command = 'destroy_objects';
+											data.async = true;
+											data.Json ={};
+											data.Json.object = config.intermediateTable.table;
+											data.Json.where = [
+												{
+													'object' : config.intermediateTable.table,
+													'field' : config.intermediateTable.pk,
+													'value' : objBy.getValue(objBy.PK)
+												},
+												{
+													'object' : config.intermediateTable.table,
+													'field' : config.intermediateTable.fk,
+													'value' : lstRemove
+												}
+											];
+											obj.sendJson(data);
+										}
+									});
+									if(config.listBy && hasAdd === false) {
+										obj.values[field] = null;
+										if(Object.keys(obj.getValue(field)).length === 0){
+											lstbyObjects.forEach(function(objBy){
+												objBy.remove();
+											});
+										}
+									}
+								}
+							},
+						key]);
+					}
+				}
+
+				function runAfterSave(){
+					afterSave.forEach(function(sv){
+						sv[0](that, sv[1]);
+					});
+				}
+				if((data.newSave === true && that.defineNewSave != null) || Object.keys(data.Json.values).length === 0 ||
+					that.noSave.indexOf(that.getValue(that.PK)) > -1 || field.doNotSave){
+					if(data.newSave === true && that.defineNewSave != null){
+						var result = that.defineNewSave(that);
+						if(Array.isArray(result))
+							AlertError({'validate' : result });
+						else{
+							if('callback' in data)
+								data.callback();
+						}
+						return false;
+					}
+					runAfterSave();
+					if('callback' in data)
+						data.callback();
+					return false;
+				}
+
+				var callbackFinish = function(){};
+				if('callback' in data)
+					callbackFinish = data.callback;
+
+				data.callback = function(result){
+					if('ids' in  result)
+						that.setValue(that.PK, result.ids[0]);
+					runAfterSave();
+					callbackFinish();
+				};
+
+				if(that.isLoaded === true){
+					data.command = 'modify_objects';
+					data.Json.where.push({
+							'object' : that.object,
+							'field' : that.PK,
+							'value' : previous_pk !== null ? previous_pk : that.getValue(that.PK)
+						});
+				}
+				else{
+					data.command = 'create_objects';
+					data.Json.values = [data.Json.values];
+				}
+
+				this.sendJson(data);
+
+
+			}else{
+				AlertError({'validate' : error});
+			}
+
+		};
+
+		obj.fn.makeJSONdata = function(){
+			var data = {};
+			data.async = true;
+			data.newSave = true;
+
+			data.Json = {};
+			data.Json.join = 'LEFT';
+			data.Json.object = this.object;
+
+			data.Json.fields = this.dbFields;
+			data.Json.where = [];
+			data.Json.order = this.order;
+
+			for(var i = arguments[0].length-1; i >= 0; i--){
+				var params = arguments[0][i];
+				if(typeof params === 'object'){
+
+					if('newSave' in params)
+						data.newSave = params.newSave;
+
+					if('group' in params)
+						data.Json.group = [{ 'object' : this.object, 'field' : this.PK }];
+
+					if('offset' in  params)
+						data.Json.offset = params.offset;
+
+					if('limit' in  params)
+						data.Json.limit = params.limit;
+
+					if('fields' in params)
+						data.Json.fields = params.fields;
+
+					if('order' in params)
+						data.Json.order = params.order;
+
+					if('where' in params){
+						if (!isNaN(params.where) || params.where.length > 0) {
+							params.where.forEach(function(field){
+								if(!('object' in field))
+									field.object = this.object;
+								data.Json.where.push(field);
+							});
+						}
+					}
+
+					if('object' in params){
+						var obj = params.object;
+
+						data.Json.where.push({
+							'object' : obj.object,
+							'field' : obj.PK,
+							'value' : obj.getValue(obj.PK)
+						});
+					}
+
+					if('value' in params)
+						data.Json.where.push({
+							'object' : this.object,
+							'field' : this.PK,
+							'value' : params.value
+						});
+
+					if('async' in params){
+						data.async = params.async;
+					}
+
+					if('join' in params){
+						data.join = params.join.toUpperCase();
+					}
+
+					if('defaultWhere' in params && params.defaultWhere){
+						if('object' in params){
+							data.Json.where = params.defaultWhere(data.Json.where, params.object);
+						}
+						else {
+							var ref, ref1;
+							// Se arguments[0][1].object exisir:
+							if (((ref = arguments[0]) != null ? (ref1 = ref[1]) != null ? ref1['object'] : void 0 : void 0) != null) {
+								data.Json.where = params.defaultWhere(data.Json.where, this, arguments[0][1].object);
+							} else if (((ref = arguments[0]) != null ? (ref1 = ref[2]) != null ? ref1['object'] : void 0 : void 0) != null) { // se arguments[0][2].object existir
+								data.Json.where = params.defaultWhere(data.Json.where, this, arguments[0][2].object) ;
+							} else {
+								data.Json.where = params.defaultWhere(data.Json.where, this, arguments[0][1].object ? arguments[0][1].object : arguments[0][2].object) ;
+							}
+						}
+					}
+
+					if('find' in  params){
+						if(params.find !== '') {
+							if (this.filters) {
+								if ('find_field' in params)
+									data.Json.where = data.Json.where.concat(this.filters[params.find_field].where(params.find));
+							}
+							else if(isNaN(params.find))
+								data.Json.where.push({
+									'object': this.object,
+									'field': this.description,
+									'value': '%' + params.find + '%'
+								});
+							else {
+								data.Json.where.push({
+									'object': this.object,
+									'field': this.PK,
+									'value': parseInt(params.find)
+								});
+
+							}
+						}
+					}
+
+					if('callback' in params)
+						data.callback = params.callback;
+
+				}else if(typeof params === 'function')
+					data.callback = params;
+
+				else
+					data.Json.where.push({
+							'object' : this.object,
+							'field' : this.PK,
+							'value' : params
+						});
+			}
+			var lastWhere = data.Json.where[data.Json.where.length - 1];
+			if(lastWhere)
+				lastWhere.connector = ') AND (';
+			return data;
+		};
+
+		obj.fn.load = function(){
+			var that = this;
+			for(var i in arguments){
+				var item = arguments[i];
+				if(!isNaN(item)){
+					that.setValue(that.PK, item);
+					that.setDefaultValue(that.PK, item);
+				}
+			}
+			var data = this.makeJSONdata(arguments);
+			data.command = 'load_objects';
+
+			var callbackFinish = function(){};
+			if('callback' in data)
+				callbackFinish = data.callback;
+
+			data.callback = function(result){
+				result[that.object].forEach(function(objData){
+					that.isLoaded = true;
+					that.setValue(objData);
+					that.setDefaultValue(objData);
+				});
+				callbackFinish();
+			};
+
+			this.sendJson(data);
+		};
+
+		obj.fn.list = function(){
+			var that = this;
+			var data = that.makeJSONdata(arguments, {'group' : true});
+			data.Json.where = that.defaultWhere(data.Json.where, that);
+			var step = 1000;
+
+			data.command = 'load_objects';
+			//jQuery.extend(true, {},originalObject);
+			if('callback' in data){
+				var callbackFinish = data.callback;
+				data.callback = function(result, data){
+					var jsonData = JSON.parse(data.Json);
+
+					var isFinish = result[that.object].length < jsonData.limit || jsonData.finish === true;
+
+					if(isFinish === false){
+						jsonData.offset += jsonData.limit;
+
+						if('stop' in jsonData){
+							if(jsonData.offset === jsonData.stop)
+								isFinish = true;
+							else if(jsonData.offset + jsonData.limit > jsonData.stop){
+								jsonData.limit = jsonData.offset + jsonData.limit - jsonData.stop;
+								jsonData.finish = true;
+							}
+						}
+					}
+
+					var lst = [];
+					result[that.object].forEach(function(objData){
+						var obj = new window[that.class];
+						obj.setValue(objData);
+						obj.setDefaultValue(objData);
+						obj.isLoaded = true;
+						lst.push(obj);
+					});
+
+					if(callbackFinish(lst, isFinish) === false)
+						isFinish = true;
+
+					if(isFinish === false){
+						data.Json = jsonData;
+						setTimeout(function(){that.sendJson(data);}, 0);
+					}
+
+				};
+			}
+
+			if('limit' in data.Json){
+				if(data.Json.limit > step){
+					data.Json.stop = data.Json.limit;
+					data.Json.limit = step;
+				}else
+					data.Json.finish = true;
+			}
+			else
+				data.Json.limit = step;
+
+			if(!('offset' in data.Json))
+				data.Json.offset = 0;
+
+			that.sendJson(data);
+		};
+
+		obj.fn.count = function(){
+			var mainArguments = Array.prototype.slice.call(arguments);
+			mainArguments.push({ 'fields' : ['COUNT(*)'] });
+			var data = this.makeJSONdata(mainArguments);
+			data.Json.where = this.defaultWhere(data.Json.where, that);
+			data.Json.offset = 0;
+			data.command = 'load_objects';
+
+			var that = this;
+			if('callback' in data){
+				var callbackFinish = data.callback;
+				data.callback = function(result){
+					var count = 0;
+					if(!('group' in JSON.parse(data.Json))){//result[that.object].length === 1){
+						count = result[that.object][0]['COUNT(*)'];
+					}else{
+						result[that.object].forEach(function(objData){
+							count++;
+						});
+					}
+					callbackFinish(count);
+				};
+			}
+
+			this.sendJson(data);
+		};
+
+		obj.fn.sendJson = function(data){
+			//var data = arguments[0];
+			data.contentType = 'application/json';
+			data.type = 'POST';
+
+			if(data.Json != null)
+				data.Json = Main.bigJSONstringify(data.Json);
+
+			this.send(data);
+		},
+
+		obj.fn.send = function(){
+
+			var data = arguments[0];
+
+
+			var url = '/' + data.command + '.fcgi';
+			//if(params != null)
+			//	url += '?' + data.params;
+			var contents = {
+				url: url,
+				async: data.async,
+				processData: false,
+				type: data.type,
+				contentType: data.contentType,
+				dataType: "text",
+				success: function(result){
+					if('callback' in data)
+						data.callback(Main.bigJSONparse(result), data);
+				},
+				error: function (result) {
+					if(result.responseText.search("log_types limit reached") !== -1) {
+						var md = new Modal();
+						md.setTitle('Limit reached');
+						md.setContent('Cannot register more types.');
+						md.addButton([{
+							'type' : 'ok',
+							'callback': saveLim
+						}]);
+						md.show();
+						function saveLim() {
+							window.location.reload();
+						}
+					} else if (typeof(result.responseJSON) == "undefined" && result.responseText.search("constraint failed: PRIMARY KEY must be unique") !== -1) {
+						var md = new Modal();
+						md.setTitle('Error');
+						md.setContent('The identifier must be unique.');
+						md.addButton([{
+							'type' : 'ok',
+							'callback': saveDuplicate
+						}]);
+						md.show();
+						function saveDuplicate() {
+							window.location.reload();
+						}
+					} else if(AlertError(result.responseJSON) === false){
+						if('callback' in data)
+							data.callback(result, data);
+					}
+				}
+			};
+			if(data != null)
+				contents.data = data.Json;
+			$.ajax(contents);
+		}
+	}
+
+	function AlertError(error){
+		var erro = '';
+		if(error.error){
+			if (error.error.indexOf('Invalid access level') === 0 && error.error.indexOf('load_objects') !== -1)
+				return true;
+			if(error.error === 'Invalid session'){
+				Main.sessionFail(error);
+				return false;
+			}else if(error.error.indexOf('constraint failed') === 0){
+				return false;
+			}
+			erro = 'An error has occurred.<br />' + error.error;
+		}else if(error.validate){
+			erro = 'Invalid data:<br />	- ' + error.validate.join('<br /> - ');
+		}else if(error.message){
+			erro = error.message;
+		}else{
+			erro = 'An unexpected error has occurred.<br />' + error;
+		}
+
+		var md = new Modal();
+		md.setTitle('Error');
+		md.setContent(erro);
+
+		md.addButton([
+			{
+				'type' : 'cancel',
+				'text' : 'OK'
+			}
+		]);
+
+		md.show();
+		return true;
+	}
+
+})();
+
+//# sourceURL=CID.js

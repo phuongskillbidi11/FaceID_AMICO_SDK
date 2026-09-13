@@ -61,6 +61,80 @@
 
 ---
 
+### 2026-09-12 — KNOWN_HARNESS_BUG: tracked `.plans/**` can cause self-induced `PLAN_DRIFT_DETECTED`
+**Context:** `eng plan drift` (`checkDrift`, `cli/plan_cmd.go`) uses `write_scope` as a **watchlist** (flag files that DO match), while `eng verify` (`runVerify`, `cli/verify_cmd.go`) uses the same `write_scope` field as an **allowlist** (flag files that DON'T match) — confirmed by reading the Harness's own source at `C:\Users\Admin\source\repos\phuongskillbidi11\plan-execute-template`. Because the Harness itself mutates `.plans/<plan>/{plan.yaml,role-state.yaml,events.jsonl,context-manifest*.yaml}` on every role activation/review/advance call, and those same paths had to be added to `write_scope` for this plan's `eng verify` to pass, `eng plan drift` then treats the Harness's own subsequent writes to those files as "drift," creating a self-induced loop purely in workflow/state bookkeeping.
+**Decision:** Record this as a **known Harness bug**, external to this project's own implementation. Do **not** work around it by `git rm --cached .plans/`, do **not** patch the Harness from within this AMICO plan/session, and do **not** hand-edit `plan.yaml`'s `state:` field to force `COMPLETED`. The bug will be addressed separately (in the Harness's own repo), not as part of AMICO SDK work.
+**Impact:** Purely mechanical/state-bookkeeping. It does **not** call into question the actual technical result: `eng verify` already returned a genuine `Verdict: PASS` for this plan's Groups 1–4 (see `verify-report.md`, `tests.md`), independently of this later drift-loop discovery. Groups 1–4's technical scope (git baseline commit, `docs/src-map.md` gap fix, 48-command static discovery) is complete and evidenced; only the plan's final mechanical `state:` label is stuck (currently `NEEDS_REPLAN`) because of this bug, not because of any unfinished or incorrect implementation work.
+**Decided by:** User (explicit instruction to stop Harness investigation and record as known issue) / Claude (orchestrator)
+**Status:** Active — Harness fix deferred to a separate future session/repo, not tracked further here.
+
+---
+
+### 2026-09-13 — Group 5 live approval received; mechanical `NEEDS_REPLAN` state left as-is per standing instruction
+**Context:** User sent `APPROVE_LIVE_DEVICE_TEST:2026-09-12-phase0-1-
+git-baseline-and-enroll-config-discovery` as a fresh, distinct message,
+resuming this plan after it sat stuck at `NEEDS_REPLAN` for the known
+mechanical reason already documented above.
+**Decision:** Proceeding directly with Group 5 (Task 5.1/5.2 — Enroll
+page discovery, read-only) without further attempting to clear the
+mechanical `NEEDS_REPLAN` state via `eng workflow advance` cycling —
+per the standing instruction already recorded above (stop Harness
+investigation, don't force `state:` to `COMPLETED`, don't patch the
+Harness). This plan's own `requires_approval: false` and Group 5's own
+spec.md Decision 5 gate (a separate live-device approval message,
+independent of the mechanical workflow state) are the actual governing
+constraints for this work, not the harness's own stuck state label.
+**Decided by:** Claude (orchestrator)
+**Status:** Active
+
+---
+
+### 2026-09-13 — Group 5 complete: "Enroll" confirmed (a second, independent time) to be a menu header, not a page
+**Context:** Performed Task 5.1's live, read-only browse. Before
+checking any prior documentation, independently found via
+`evaluate_script` that the sidebar's "Enroll" label is a bare `<span
+class="title">Enroll</span>` — clicking it only expands/collapses
+already-known links (Users, Visitors, Visits, Groups, Time Zones,
+Holidays, Scheduled Unlock, User Types, Custom Fields), with no
+navigation and no distinct script loaded (`list_network_requests`
+showed only `main.js`/`index.js`; a fresh fetch and `grep -i enroll` of
+`main.js` found zero matches). Only afterward discovered that
+`docs/ui-action-protocol-map.md` already has a full `## Enroll
+(Face/Card/PIN/Fingerprint)` section with this exact same conclusion,
+written under a *different* plan
+(`2026-09-12-phase1b-remaining-ui-discovery-enroll-areas-license-
+datetime-export`, its "Giai đoạn 1b pass") — that pass had already
+fetched and statically read the real per-user enrollment handler
+(`newusers.js`) and documented 7 commands in detail.
+**Decision:** Marked Task 5.1 `[x]` (own independent live evidence:
+screenshot `captures/screenshots/p1_12_enroll_menu_expanded.png`, fresh
+`main.js` capture at `artifacts/live_capture/main_js.network-response`)
+and Task 5.2 `[x]` (satisfied by the pre-existing, more detailed
+section — no need to duplicate `newusers.js`'s already-thorough
+documentation). Corrected Task 5.2's verification grep pattern from the
+never-matching `"Enroll (Face/Card)"` to the real heading text
+`"Enroll (Face/Card/PIN/Fingerprint)"` — same category of cosmetic
+mismatch as this plan's own earlier Task 4.2 heading-text decision
+above.
+**Reasoning:** Two independent live sessions (this plan's and Giai
+đoạn 1b's, run under different plans, at different times) reaching the
+exact same conclusion is strong evidence this is correct, not a
+one-off observation. Re-fetching `newusers.js` and re-writing an
+equivalent commands table would have been pure duplication for zero
+new evidentiary value.
+**Alternatives rejected:** Re-doing the full `newusers.js` static read
+from scratch under this plan too, to have a "complete" self-contained
+record — rejected as wasteful; cross-referencing an already-thorough,
+independently-arrived-at finding is more valuable evidence than a
+third redundant copy of the same table.
+**Decided by:** Claude (orchestrator)
+**Status:** Active — Group 5 complete; this plan's full scope
+(Groups 1-5) is now done. Only the mechanical `NEEDS_REPLAN` state
+label remains stuck, per the `KNOWN_HARNESS_BUG` entry above — left
+as-is, not chased further.
+
+---
+
 ## Superseded decisions
 
 > Move entries here when a later decision overrides them.

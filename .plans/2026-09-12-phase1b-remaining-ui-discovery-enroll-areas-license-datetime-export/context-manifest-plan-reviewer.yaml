@@ -1,0 +1,7 @@
+role: plan-reviewer
+plan: 2026-09-12-phase1b-remaining-ui-discovery-enroll-areas-license-datetime-export
+generated_at: 2026-09-12T09:59:22Z
+request: "Đóng 5 khoảng trống discovery mà chính `docs/ui-action-protocol-map.md`'s\n\"Gaps not resolved this pass\" (từ plan `p1-read-only-browser-mcp-discovery-pass-`)\nđã nêu rõ nhưng chưa từng làm: trang **Enroll** (face/card enrollment),\ntrang quản lý **Areas/Portals**, panel **License Mode**, panel **Date and\nTime**, và handler nút **Report Export**. Đây là bước cuối cùng để bức\ntranh protocol/API của AMICO Web UI hoàn chỉnh, trước khi bắt đầu implement\nbất kỳ API ghi nào (user CRUD, enrollment...) ở giai đoạn sau.\n\n**Done looks like:** `docs/ui-action-protocol-map.md` có mục riêng cho cả\n5 khoảng trống trên, mỗi mục có evidence category rõ ràng\n(`LIVE_CONFIRMED`/`JS_CONFIRMED`/`UI_HANDLER_CONFIRMED`), và mục \"Gaps not\nresolved this pass\" được cập nhật để phản ánh đúng những gì còn lại thật\nsự (nếu có) sau lượt này — không còn khoảng trống nào bị bỏ sót một cách\nâm thầm.\n\n---"
+risk_level: feature
+requires_approval: false
+project_sections:

@@ -1,0 +1,8 @@
+role: planner
+plan: 2026-09-12-phase1b-remaining-ui-discovery-enroll-areas-license-datetime-export
+generated_at: 2026-09-12T09:50:49Z
+request: "Hoàn thiện discovery Enroll, Areas/Portals, License Mode, Date/Time, Report Export"
+project_sections:
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+tools:

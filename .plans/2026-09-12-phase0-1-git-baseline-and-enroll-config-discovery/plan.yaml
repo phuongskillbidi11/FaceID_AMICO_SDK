@@ -1,8 +1,8 @@
 plan: 2026-09-12-phase0-1-git-baseline-and-enroll-config-discovery
 risk_level: feature
 planned_at:
-    git_sha: 2ff9b0e41be72bc2eb51e7ae4365b4b96c280b83
-state: APPROVED
+    git_sha: d6ec03df1d21286fb5b4a2fcaa652a8a7c1e56bd
+state: NEEDS_REPLAN
 write_scope:
     - .agent/project.yaml
     - .clang-tidy
@@ -340,9 +340,9 @@ retry_budget:
 requires_approval: false
 review:
     verdict: PASS
-    reviewed_at: "2026-09-12T09:11:17Z"
+    reviewed_at: "2026-09-12T09:34:49Z"
 verification:
     verdict: PASS
-    verified_at: "2026-09-12T09:30:38Z"
+    verified_at: "2026-09-12T09:32:01Z"
 spec_approved_at: "2026-09-12T09:06:34Z"
 spec_approved_by: 'user (chat message, verbatim): ''oke'' -- confirming spec.md for Giai đoạn 0+1 (git baseline + Enroll/config discovery)'

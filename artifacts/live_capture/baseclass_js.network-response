@@ -1,0 +1,146 @@
+function BaseClass(object, messenger, table, tableKey, tableOrder, fieldsFull, fieldsSimple){
+
+	var $messenger = messenger;
+	var $table = table;
+	var $tableKey = tableKey;
+	var $tableOrder = tableOrder;
+	var $object = object;
+	var $fieldsFull = fieldsFull;
+	var $fieldsSimple = fieldsSimple;
+	/*if($fieldsSimple == null)
+		$fieldsSimple = ['id', 'name'];
+	else if($fieldsSimple.length == 0)
+		$fieldsSimple = null;*/
+
+
+	this.getFieldsFull = function(){
+		return $fieldsFull;
+	};
+
+	this.getFieldsSimple = function(){
+		return $fieldsSimple;
+	};
+
+	this.getTable = function(){
+		return $table;
+	};
+
+	this.getTableKey = function(){
+		return $tableKey;
+	};
+
+	this.getTableOrder = function(){
+		return $tableOrder;
+	}
+
+	this.new = function(){
+		return new $object();
+	}
+
+	var $id = null;
+	var $name = null;
+
+// ------------------- BEGIN CRUD -------------------- //
+
+
+
+	this.remove = function(ids){
+		if(ids == null)
+			ids = [$id];
+		if(ids.length > 0)
+			return $messenger.remove(ids);
+		else
+			return true;
+	};
+
+	this.removeObjects = function(elems){
+			var ids = [];
+		elems.forEach(function(elem){
+			ids.push(elem.getId());
+		});
+		return $messenger.remove(ids);
+	};
+
+	this.load = function(id, realData){
+		$messenger.setFields($fieldsFull);
+		$messenger.load(id, realData);
+	};
+
+	this.loadSimple = function(id, realData){
+		$messenger.setFields($fieldsSimple);
+		$messenger.load(id, realData);
+	};
+
+	this.parse = function(data){
+		this.setId(data.id);
+		this.setName(data.name);
+	};
+
+
+// ------------------- END CRUD -------------------- //
+
+
+
+// ------------------- BEGIN GET/SET -------------------- //
+
+	this.getId = function(){
+		return $id;
+	};
+	this.setId = function(id){
+		if(id != null && id !== '')
+			$id = parseInt(id);
+	};
+	this.setNullId = function(){
+		$id = null;
+	};
+
+	this.getName = function(){
+		return $name;
+	};
+	this.setName = function(name){
+		$name = name;
+	};
+
+	this.listAll = function(find){
+		$messenger.setFields($fieldsFull);
+		return this.list(null, null, find, null, null);
+	};
+	this.listAllSimple = function(find){
+		$messenger.setFields($fieldsSimple);
+		return this.list(null, null, find, null, null);
+	};
+
+	this.list = function(start, size, find, order, where){
+		//console.log('CALLBACK ' + callback);
+		$messenger.setFields($fieldsFull);
+		var lst = [];
+		var aux = [];
+		var _start = start;
+		var limit = size;
+		if(size == 0)
+			size = 1000;
+		do{
+			aux = $messenger.list(_start, size, find, order, where);
+			lst = lst.concat(aux);
+			_start = start + lst.length;
+			if(limit > 0 && _start > limit){
+				size = _start - limit;
+				console.log(size)
+			}
+		}while(aux.length > 0 && (limit == 0 || limit > _start))
+		return lst;
+	};
+	this.listSimple = function(start, size, find, order, where){
+		$messenger.setFields($fieldsSimple);
+		return $messenger.list(start, size, find, order, where);
+	};
+
+	this.countAll = function(find){
+		return $messenger.count(find);
+	};
+
+
+// ------------------- END GET/SET -------------------- //
+
+
+};

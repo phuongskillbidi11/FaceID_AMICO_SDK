@@ -1,0 +1,196 @@
+function Group(){
+
+	var $messenger = new Messenger(this);
+	BaseClass.call(this, Group, $messenger, 'groups', 'id', ['name'], null, null);
+
+	var $countUsers = null;
+	var $lstUsers = null;
+	var $users = new IntermediateTable(this, 'user_groups', 'group_id', 'user_id');
+
+	var $countAccessRules = null;
+	var $lstAccessRules = null;
+
+	var $countTimeZone = null;
+	var $lstTimeZone = null;
+
+
+
+// ------------------- BEGIN CRUD -------------------- //
+
+	this.validate = function(data){
+		var result = [];
+		if('name' in data){
+			if(ValidateUtil.isEmpty(data.name)){
+				result.push('Enter a valid name');
+			}
+		}
+		return result;
+	};
+
+	this.parse = function(data){
+		$messenger.loaded();
+		this.setId(data.id);
+		this.setName(data.name);
+	};
+
+
+	this.save = function(
+		lstUserAdd, lstUserDel,
+		lstTimeZoneAdd, lstTimeZoneDel
+	){
+		var valid = {};
+		valid.name = this.getName();
+		var lstError = this.validate(valid);
+		if(lstError.length > 0){
+			return {'validate' : lstError};
+		}
+
+		var bool = $messenger.save({ 'name' : this.getName()});
+		if(bool){
+
+			if(Main.isOnline() == false){
+				var that = this;
+				if(this.getCountAccessRules() == 0 && lstTimeZoneAdd.length > 0){
+					var portal_1 = new Portal();
+					portal_1.load(-1);
+					var portal_2 = new Portal();
+					portal_2.load(-2);
+					var rule = new AccessRule();
+					rule.setName('(AccessRule automatically created for Group ' + this.getId() + ')');
+					rule.setType(true);
+					rule.save(lstTimeZoneAdd, null, [that], null, null, null, null, null, [portal_1, portal_2], null);
+				}else if(lstTimeZoneDel != null && lstTimeZoneDel.length > 0 || lstTimeZoneAdd != null && lstTimeZoneAdd.length > 0){
+					this.getAccessRules().forEach(function(rule){
+						rule.save(lstTimeZoneAdd, lstTimeZoneDel, null, null, null, null, null, null, null, null);
+					});
+				}
+				/*if(lstTimeZoneAdd != null){
+					lstTimeZoneAdd.forEach(function(tz){
+						tz.getAccessRules().forEach(function(rule){
+							rule.save(null, null, [that], null, null, null, null, null, null, null);
+						});
+					});
+				}*/
+
+				$lstAccessRules = null;
+				$countAccessRules = null;
+				$countTimeZone = null;
+				if(this.getCountTimeZones() == 0 && this.getCountAccessRules() > 0){
+					$lstAccessRules = null;
+					new AccessRule().removeObjects(this.getAccessRules());
+				}
+				/*if(lstTimeZoneDel != null){
+					lstTimeZoneDel.forEach(function(tz){
+						tz.getAccessRules().forEach(function(rule){
+							rule.save(null, null, null, [that], null, null, null, null, null, null);
+						});
+					});
+				}*/
+			}
+
+			$users.add(lstUserAdd);
+			$users.remove(lstUserDel);
+
+		}
+		return bool;
+	};
+
+// ------------------- END CRUD -------------------- //
+
+
+
+// ------------------- BEGIN USERS -------------------- //
+
+	this.getCountListUsers = function(lst){
+		$messenger.countListBy(lst, new User(), function(obj, count){
+			obj.setCountUsers(count);
+		});
+	};
+
+	this.getCountUsers = function(){
+		if($countUsers == null)
+			$countUsers =  $messenger.countBy(new User());
+		return $countUsers;
+	};
+
+	this.setCountUsers = function(count){
+		if(count == null)
+			$countUsers = count;
+	};
+
+	this.getUsers = function(){
+		if($lstUsers == null)
+			$lstUsers = $messenger.listBy(new User());
+		return $lstUsers;
+	};
+
+	this.getJoinUsers = function(){
+		return $messenger.join(new User().listAllSimple(), this.getUsers());
+	};
+// ------------------- END USERS -------------------- //
+
+
+
+// ------------------- BEGIN ACCESS RULES -------------------- //
+
+	this.getCountAccessRules = function(){
+		if($countAccessRules == null){
+			if(Main.isOnline == false)
+				$countAccessRules = $messenger.countBy(new AccessRule(), '(AccessRule_TimeZone automatically created for Group ' + this.getId() + ')');
+			else
+				$countAccessRules = $messenger.countBy(new AccessRule());
+		}
+		return $countAccessRules;
+	}
+
+	this.getAccessRules = function(){
+		if($lstAccessRules == null){
+			if(Main.isOnline == false)
+				$lstAccessRules = $messenger.listBy(new AccessRule(), null, null, null, '(AccessRule_TimeZone automatically created for Group ' + this.getId() + ')');
+			else
+				$lstAccessRules = $messenger.listBy(new AccessRule());
+		}
+		return $lstAccessRules;
+	}
+
+	this.getJoinAccessRules = function(){
+		return $messenger.join(new AccessRule().listAllSimple(), this.getAccessRules());
+	};
+
+// ------------------- END ACCESS RULES -------------------- //
+
+
+
+// ------------------- BEGIN TIME ZONE -------------------- //
+
+	this.getCountTimeZones = function(){
+		if($countTimeZone == null){
+			$countTimeZone = 0;
+			this.getAccessRules().forEach(function(rule){
+				$countTimeZone += rule.getCountTimeZones();
+			});
+		}
+		return $countTimeZone;
+	}
+
+	this.getTimeZones = function(){
+		if($lstTimeZone == null){
+			$lstTimeZone = [];
+			this.getAccessRules().forEach(function(rule){
+				rule.getTimeZones().forEach(function(zone){
+					$lstTimeZone.push(zone);
+				});
+			});
+		}
+		return $lstTimeZone;
+	}
+
+	this.getJoinTimeZones = function(){
+		return $messenger.join(new TimeZone().listAllSimple(), this.getTimeZones());
+	};
+
+// ------------------- END TIME ZONE -------------------- //
+
+};
+
+

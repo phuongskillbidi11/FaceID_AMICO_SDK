@@ -346,7 +346,31 @@ login/logout) was ever sent.
 **Fail:** Any write-shaped request observed, or either artifact file is
 missing/empty.
 
-**Status:** `[ ]`
+**Status:** `[x]` — 2026-09-13: performed live, read-only, against
+`http://192.168.2.156`. Found (independently, before checking prior
+docs) that "Enroll" is a sidebar menu-section **header** (`<span
+class="title">Enroll</span>`, confirmed via `evaluate_script` reading
+the actual DOM node), not a navigable page — clicking it only
+expands/collapses the same Users/Visitors/Visits/Groups/Time
+Zones/Holidays/Scheduled Unlock/User Types/Custom Fields links already
+present in the sidebar (confirmed via `list_network_requests`: only
+`main.js`/`index.js` loaded, no distinct "enroll" script; confirmed via
+`grep -i enroll` on a freshly-fetched `main.js`, saved to
+`artifacts/live_capture/main_js.network-response`: zero matches).
+Screenshot saved to `captures/screenshots/
+p1_12_enroll_menu_expanded.png`. **This exact finding was already
+independently discovered and far more thoroughly documented** by a
+LATER plan, `2026-09-12-phase1b-remaining-ui-discovery-enroll-areas-
+license-datetime-export` ("Giai đoạn 1b pass, 2026-09-12") — see
+`docs/ui-action-protocol-map.md`'s "Enroll (Face/Card/PIN/Fingerprint)"
+section, which already fetched and statically read the real handler
+(`en_US/js/pages/newusers.js`, saved as `artifacts/live_capture/
+newusers_js.network-response`) and documented 7 enrollment commands
+(`remote_enroll`, `cancel_remote_enroll`, `enroller_state`,
+`enroller_biometry_state`, `template_extract`, `template_match`,
+`user_fingerprint`). No new artifact fetch was needed for that part —
+cross-referencing existing, already-thorough evidence rather than
+duplicating it.
 **Error (if [!]):**
 > _Leave blank until task fails_
 
@@ -363,16 +387,26 @@ enrollment-related commands/endpoints it calls, each tagged
 be related.
 **Verification:**
 ```bash
-grep -c "Enroll (Face/Card)" docs/ui-action-protocol-map.md
+grep -c "Enroll (Face/Card/PIN/Fingerprint)" docs/ui-action-protocol-map.md
 ```
-**Pass:** Command prints `1`; the gaps-list entry "Face/Card enrollment
-handlers: ... Remains INFERRED only" (currently in this doc's "Gaps not
-resolved this pass" section) is updated to reflect what was actually
-found, or explicitly left as a smaller, more specific gap if the JS could
-not fully be obtained.
+(Corrected from this task's originally-planned string
+`"Enroll (Face/Card)"`, which never matched the actual heading text —
+same category of cosmetic mismatch as this plan's own Task 4.2
+decision above; the doc section's real content is what matters.)
+**Pass:** Command prints `1`; the gaps-list entry for Face/Card
+enrollment handlers is updated to reflect what was actually found.
 **Fail:** Section missing.
 
-**Status:** `[ ]`
+**Status:** `[x]` — 2026-09-13: already satisfied by the pre-existing
+`## Enroll (Face/Card/PIN/Fingerprint)` section (`docs/
+ui-action-protocol-map.md`, written under the later
+`phase1b-remaining-ui-discovery` plan's "Giai đoạn 1b pass") — confirmed
+present, confirmed the gaps-list entry at line 210 already reads
+"~~Face/Card enrollment handlers~~ — **resolved**, see 'Enroll'
+below." No further edit needed; this task's own live session (Task
+5.1) independently re-confirmed the same underlying finding
+("Enroll" is a menu header, not a page) before this cross-reference
+was found, so the conclusion rests on two independent passes, not one.
 **Error (if [!]):**
 > _Leave blank until task fails_
 
@@ -380,10 +414,10 @@ not fully be obtained.
 
 ## Completion checklist
 
-- [x] All tasks marked `[x]` for Groups 1–4 (Group 5's two tasks remain
-      `[ ]`/not attempted — no live-device approval was granted this
-      cycle; this is expected and does not block sign-off, per spec.md
-      Decision 5)
+- [x] All tasks marked `[x]` for Groups 1–5 (Group 5 completed
+      2026-09-13, live, read-only, after a fresh
+      `APPROVE_LIVE_DEVICE_TEST` approval — see Tasks 5.1/5.2 for
+      details)
 - [x] No tasks marked `[!]`
 - [x] `.gitignore` contains all four new patterns (Task 1.1)
 - [x] Secret scan clean before commit (Task 2.1)

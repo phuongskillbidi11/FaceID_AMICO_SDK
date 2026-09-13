@@ -193,28 +193,247 @@ successfully opened in this pass — see gap below. Its write side
 `get_ntp_server_status`) is `UI_HANDLER_CONFIRMED` via the `configurations.js`
 command list.
 
-## Gaps not resolved this pass (carried to the P4 gate re-evaluation)
+## Gaps not resolved this pass (P1-era — resolved or reclassified in the
+## Giai đoạn 1b pass, 2026-09-12; see the sections below)
 
-- **License Mode tile** and **Date and Time tile**: clicking them did not
-  produce a distinct captured panel/request in this session (a stuck modal
-  overlay from the "About" tile likely interfered — see
-  `captures/screenshots/p1_09_license_mode.png`, which still shows the
-  About panel). Not retried further this pass to stay within a reasonably
-  short session. License data is already adequately covered via
-  `system_information.fcgi`; Date/Time's write commands are covered via
-  the static command list either way.
-- **Areas / Portals dedicated management page**: not located in this
-  session's navigation; `object:"areas"` itself is confirmed (Phase 1), but
-  no page-level CRUD UI for it was inspected.
-- **Face/Card enrollment handlers**: the "Enroll" top-level page was not
-  visited this pass; its write commands are not yet in the
-  `configurations.js`-derived command list. Remains `INFERRED` only
-  (the manual's general description of enrollment, nothing protocol-level).
-- **Sort-by-column**: no clickable sort control was found on the Users
-  page in this theme/firmware version; `"order"` appears fixed
-  server-side-default rather than user-controlled here.
-- **Report "Export" button handler**: not statically read this pass.
+- ~~**License Mode tile** and **Date and Time tile**~~ — **resolved**,
+  see "License Mode" and "Date and Time" sections below. Root cause of
+  P1's stuck modal confirmed to be operator sequencing (opening "About"
+  first), not a device/UI defect — a clean Settings page load with
+  License Mode or Date and Time as the first tile clicked works without
+  issue.
+- ~~**Areas / Portals dedicated management page**~~ — **resolved as a
+  confirmed-absent finding** (not an open gap): see "Areas/Portals" below.
+  No such page exists in this web UI; `object:"areas"`/`portal_rules`-family
+  objects are backend-only, used by export, not exposed as a management
+  page.
+- ~~**Face/Card enrollment handlers**~~ — **resolved**, see "Enroll" below.
+  The "Enroll" top-level label is a menu-section header, not a page; the
+  actual enrollment commands were found by statically reading
+  `users.html`'s own script (`newusers.js`).
+- **Sort-by-column**: still not a real gap — no clickable sort control
+  exists on the Users page in this theme/firmware version (P1's original
+  finding, unchanged, not re-investigated this pass).
+- ~~**Report "Export" button handler**~~ — **resolved**, see "Report
+  Export" below.
 
+**New gaps opened this pass** (observed while navigating, out of scope
+for Giai đoạn 1b, not investigated — carried forward):
+- **Visitors** (`customusers.html?type=1`) and **Visits** (`visits.html`)
+  — distinct dashboard menu entries, never visited.
+- **Data Tools > Import/Export** (`import.html` / `export.html`) — a
+  full data export/backup page, distinct from the per-report "Export"
+  button already covered below.
+- **Internal Alarms** / **Alarm Output** pages — never visited.
+- Dashboard-level **"Open relay"** / **"Open Door"** controls — never
+  clicked (live physical-door/relay actions; explicitly out of scope for
+  any read-only discovery pass).
+
+
+## Enroll (Face/Card/PIN/Fingerprint) — `LIVE_CONFIRMED` (page structure) + `JS_CONFIRMED` (commands, static read, never invoked)
+
+Giai đoạn 1b pass (2026-09-12), live session against `192.168.2.156`,
+read-only. No standalone "Enroll" page/URL exists — the dashboard's
+"Enroll" label is a menu-section **header**, not a link, covering
+Users/Visitors/Visits/Groups/Time Zones/Holidays/Scheduled
+Unlock/User Types/Custom Fields (all already `LIVE_CONFIRMED` pages).
+Actual per-user enrollment lives inside `users.html`'s own edit modal,
+whose script is `en_US/js/pages/newusers.js` — fetched via a plain `GET`
+the browser already made on page load (saved to
+`artifacts/live_capture/newusers_js.network-response`, 34463 bytes). The
+"ADD" button itself was **never clicked**; every command below was found
+by reading this already-fetched static file. Screenshot:
+`captures/screenshots/p1b_01_users_enroll_entry.png`.
+
+Commands found here, not present in the 78-command `configurations.js`
+inventory (evidence: `JS_CONFIRMED`, static read only):
+
+| Command | Purpose | Payload / notes |
+|---|---|---|
+| `remote_enroll` | Starts **device-side** biometric/PIN capture — the physical reader's own camera/keypad, not a browser webcam. | `{type, save, user_id, [auto, countdown — for face], [panic_finger — for duress fingerprint]}` |
+| `cancel_remote_enroll` | Cancels an in-progress remote enrollment. | No payload observed. |
+| `enroller_state` | Polled every 2s while enrolling. | Returns `{enroller_state: "NORMAL_STATE"\|"ENROLL_FACE_STATE"\|"ENROLL_PIN_STATE", last_enroll, last_enroll_error: "UNKNOWN"\|"FACE_EXISTS", biometry_state}`. |
+| `enroller_biometry_state` | Biometry-specific enrollment state, used by a related fingerprint modal. | Body not further read this pass. |
+| `template_extract` (via `MessengerUtil.sendFile`, not `.send`) | **PC-side** fingerprint enrollment step 1 — extracts a template from a raw scanned image (a USB fingerprint scanner attached to the administrator's PC, a distinct hardware path from `remote_enroll`). | Raw image bytes + `width`/`height` query params. |
+| `template_match` (via `sendFile`) | PC-side fingerprint step 2 — confirms 3 captures are consistent. | Concatenated template bytes; errors: `"Template exists"` (already enrolled), `"Different fingerprints"` (capture mismatch). |
+| `user_fingerprint` (via `sendFile`) | Associates a captured fingerprint with a user. | Raw bytes + `user_id` param. |
+
+No password, session token, or real biometric data was transmitted or
+saved by this pass — purely a static read of already-cached JS text.
+
+---
+
+## Areas/Portals — confirmed absent (not a gap, a definitive negative finding)
+
+Giai đoạn 1b pass (2026-09-12). Checked the full dashboard menu (Home /
+Enroll-section / Alarms / Reports / Data Tools / Settings / Log Out) and
+the full Settings tile list (73 tiles — see "License Mode"/"Date and
+Time" below for how that list was captured) — **no "Areas" or "Portals"
+management entry exists anywhere** in this web UI. The only related
+evidence: `class/area.js` and `class/portal.js` are generic frontend
+model classes loaded on every page (not a dedicated management UI), and
+the rule-table object names already documented in the Giai đoạn 0+1
+plan's 48-command pass (`portal_rules`, `area_access_rules`,
+`portal_access_rules`, `portal_portal_rules`, `portal_rule_actions`,
+`portal_rule_groups`, `portal_rule_time_zones`) are used only by the
+`export_objects` backup/export flow, never by a page-level CRUD UI. This
+more thoroughly confirms P1's original suspicion — treat as closed, not
+open.
+
+---
+
+## License Mode — `LIVE_CONFIRMED`
+
+Giai đoạn 1b pass (2026-09-12). Opened cleanly as the first tile clicked
+on a freshly-loaded Settings page (no stuck modal, unlike P1 — root cause
+of P1's issue was operator sequencing: opening "About" first). Screenshot:
+`captures/screenshots/p1b_02_license_mode.png`.
+
+New request confirmed (not previously documented anywhere):
+```
+POST get_configuration.fcgi
+{"sec_box":["catra_role"]}
+→ {"sec_box":{"catra_role":"0"}}
+```
+plus a re-fetch of the already-known `system_information.fcgi`.
+
+The modal has two tabs ("Upgrade License Mode" / "Set License Mode"),
+shows current/max face limits (`10000` / `50000`), the equipment serial,
+and a password-gated radio selection for upgrading to a higher
+face-count tier (options observed: "Pro 50k (already done)", "Pro
+100k"). The password field was left empty; only "Cancel" was clicked to
+close — `Save` was never invoked.
+
+---
+
+## Date and Time — `LIVE_CONFIRMED`
+
+Giai đoạn 1b pass (2026-09-12). Opened cleanly (no stuck modal).
+Screenshot: `captures/screenshots/p1b_03_date_time.png`.
+
+New **read**-side requests confirmed:
+```
+POST get_configuration.fcgi  {"ntp":["enabled","timezone"]}
+  → {"ntp":{"enabled":"0","timezone":"UTC+7"}}
+POST get_configuration.fcgi  {"general":["clock_12h_format","month_day_year_format"]}
+  → {"general":{"clock_12h_format":"0","month_day_year_format":"0"}}
+POST get_ntp_server.fcgi     {}
+  → {"server1":"vn.pool.ntp.org","server2":"pool.ntp.org"}
+```
+plus a re-fetch of `system_information.fcgi`. The panel displays NTP
+server fields (disabled — NTP currently off), a date-format radio, a
+time-zone dropdown, current date/time fields, and daylight-saving
+start/end fields. Closed via "Cancel"; nothing saved or submitted.
+(Write-side commands `set_system_time`/`set_ntp_server`/
+`get_ntp_server_status` were already `UI_HANDLER_CONFIRMED` via the Giai
+đoạn 0+1 48-command pass — not re-documented here.)
+
+---
+
+## Report Export — `LIVE_CONFIRMED` (request shape only — never the actual row data)
+
+Giai đoạn 1b pass (2026-09-12). Confirmed this is a **real server-side
+request**, not a client-side-only render. Clicking "Export" on the
+"Access (Global)" report fires two `POST report_generate.fcgi` calls:
+
+1. An id-only query — shape:
+   `{"offset":0,"limit":10,"where":{"access_logs":{"time":{...}}},"order":["descending","time"],"object":"access_logs","delimiter":";","line_break":"\r\n","header":"","file_name":"","join":"LEFT","columns":[{"field":"id","object":"access_logs","type":"object_field"}]}`
+   — fetches matching row IDs only.
+2. A full-row query — the same shape but with `where.access_logs.id` set
+   to that ID list, and a full `columns` array covering
+   `access_logs.id/time/event/identifier_id`, `users.id/name/registration`,
+   `portals.name`, `time_zones.name` — returns the actual
+   semicolon-delimited, `\r\n`-terminated row data as plain text
+   (`content-type: text/plain`), which the browser then offers as a
+   downloadable file.
+
+Per `docs/security-sanitization-policy.md`, only this request/response
+**shape** is recorded — the actual response (real user names and access
+timestamps) was viewed inline during the session and **never saved to
+any file in this repo**.
+
+---
+
+## User CRUD write commands — `JS_CONFIRMED` (Giai đoạn 2 Group 0, 2026-09-12)
+
+Static read (never invoked) of `en_US/js/messenger.js` (the generic
+`Messenger`/`MessengerUtil` framework every object-editing page —
+Users, Groups, Portals, etc. — shares), `en_US/js/class/user.js`, and
+`en_US/js/class/baseclass.js`, fetched live but read only as already-cached
+static text. Saved to `artifacts/live_capture/{messenger_js,user_class_js,baseclass_js}.network-response`.
+
+### The generic dispatcher (applies to `users` and every other Table-backed object)
+
+`Messenger.save(values)` picks `create`/`modify` based on whether the
+object is already loaded; both ultimately call
+`MessengerUtil.send(command, $data)` → `POST /<command>.fcgi`, same
+one-dispatcher pattern as every other command in this document.
+
+| Operation | Command | Request body (`$data`) | Response |
+|---|---|---|---|
+| Create | `create_objects` | `{"object":"users","values":[{"registration":<string>,"name":<string>}]}` — **`values` is a one-element ARRAY**, not a bare object (plus `password`/`salt` inside that same element only if a password was set — see below) | `{"ids":[<new_id>, ...]}` on success (the SDK-facing code reads `data.ids[0]`); `{"error":...}` on failure. |
+| Update | `modify_objects` | `{"object":"users","values":{<changed fields>},"where":{"users":{"id":<id>}}}` | `{"changes":<count>}` on success (checked as `data.changes > 0`); `{"error":...}` on failure. |
+| Delete | `destroy_objects` | `{"object":"users","where":{"users":{"id":[<id>, ...]}}}` (already confirmed in the Giai đoạn 1b pass, from the Users page's "Remove" button) | `{"changes":<count>}`, truthy-checked. |
+
+**Correction (2026-09-12, live-verified during Group 5/Task 5.2 attempt #1):**
+the initial static read of this section missed one line: `messenger.js`'s
+`this.save = function(values){ if($loaded) return this.modify(values);
+else return this.create([values]); }` — note `this.create([values])`
+wraps the single `values` object in an array specifically for the
+create path (update/`this.modify(values)` passes the bare object
+through unchanged). The SDK's first implementation of
+`buildUserCreateBody` sent a bare object (matching the *first*, faulty
+static reading) and was rejected by the real device with **HTTP 400**
+on the first live-write attempt — no user was created, no cleanup was
+needed. Fixed in `src/ObjectQuery.cpp` to wrap `values` in a one-element
+array; re-verified offline (58 cases/309 assertions) before the retry.
+This is the exact scenario Group 5's live-write gate exists to catch —
+a static-JS-only reading missed one line of real control flow, and the
+live test caught it before it could ship as a real, unverified bug.
+
+### Answering this plan's Open Questions
+
+- **`create_objects` vs. `object_add` for `users`:** these are **not**
+  the same command and are **not** interchangeable. `create_objects` is
+  the row-creation command for any Table-backed object, including
+  `users`. `object_add` is a completely different, schema-level command
+  used only by the Settings page's custom-table-import feature — its
+  payload is `{object:<table_name>, name:<table_label>, id:<table_id>,
+  fields:<column_metadata>}` (`configurations_js.network-response`,
+  ~line 6689) — it defines a new **table schema**, not a `users` row.
+  `object_add` is irrelevant to user CRUD.
+- **Does the create response echo the new row's id?** Yes —
+  `{"ids":[<new_id>]}`, confirmed directly in `user.js`'s
+  `this.save(...)`: `$objectInstance.setId(data.ids[0])`.
+
+### Important scope narrowing: only `name` and `registration` are ever sent by the actual web UI
+
+Reading `user.js`'s own `save()` function (the real "Save" button
+handler for a user), the `values` object it builds is **only**
+`{"registration": ..., "name": ...}`, plus `password`/`salt` (only if a
+password was entered — see below). **`user_type_id`, `begin_time`, and
+`end_time` — despite being read fields (`kUserFields`) — are never part
+of any create/update `values` payload found in this pass.** No setter or
+call site for them was found in `user.js`, `newusers.js`, or
+`messenger.js`. This is a real, evidence-backed finding, not an
+assumption: the SDK's write API for this phase should only support
+`name`/`registration` as writable fields — treating `user_type_id`/
+`begin_time`/`end_time` as writable would be unsupported invention.
+(How those three fields actually get set — a different tab, a linked
+schedule/group assignment, or a server-side default — is undetermined
+and out of scope for this pass.)
+
+### Password handling (context only — SDK does not implement this)
+
+Passwords are **never sent in plaintext**. `user.js`'s `save()` first
+calls `MessengerUtil.send('user_hash_password', {password: <plaintext>})`,
+which returns `{password: <hash>, salt: <salt>}`; only those hashed
+values are placed into the `create_objects`/`modify_objects` `values`
+object. This SDK deliberately does not implement `user_hash_password` or
+any password-setting path in this phase (spec.md Decision 3) — noted
+here only so a future phase doesn't have to re-discover it.
+
+---
 
 ## Task 4.2 - P6 static discovery: 48 additional command contracts (2026-09-12)
 
@@ -278,5 +497,190 @@ Scope clarification for the earlier platform-level paragraph: this file contains
 Configuration contract notes: `get_configuration` requests module-to-array selections, while `set_configuration` sends module-to-object assignments. The initial beep/log/identification controls (20-109) demonstrate both shapes and string flags. These commands also serve biometric/camera settings, SIP/audio/streaming, logo selection, push/cloud, date/time, screen/power, networking, SecBox/turnstile, Wiegand/OSDP, RFID/Mifare/HID, attendance, relays, alarms, and scheduled reboot settings. The complete literal call-site inventory above is retained because a single example is not a complete list of supported setting names.
 
 Dynamic write examples include `{[plugin]:{log_verbosity:verbosity}}` from debug inputs (7142-7149), `configToSave` for Wiegand and OSDP (11040, 11879), and the power-settings `param` object (13755-13787): `general.energy_display_custom`, `energy_sound_custom`, `energy_ir_custom`, `energy_led_custom`, `energy_mode`; `face_module.led_ir_brightness`; and conditional `general.screen_brightness`, `pjsip.speaker_volume`, `led_white.brightness`. Numeric settings are often converted to strings; do not normalize all payload values to booleans or numbers. RGB writes (7445-7464) require a separate `led_rgb_refresh` call in this UI; OSDP changes can trigger a separate reboot (11879-11889). Neither behavior proves that every configuration write reboots or needs a refresh.
+
+---
+
+## Users rich-profile write commands — `JS_CONFIRMED` (Giai đoạn 2b Group 0, 2026-09-12)
+
+> Added after Plan Review (`review.md` for
+> `2026-09-12-phase2b-users-rich-profile-groups-cards-admin-image-pin`)
+> found the original assumption that these shapes were "already known"
+> was unbacked by any prior entry in this file. Every shape below traces
+> to a specific tasks.md Group 0 task, not to memory/summary carryover.
+
+### Group membership (`user_groups`) — Task 0.3
+Static read of `class/intermediatetable.js` (cached,
+`artifacts/live_capture/intermediatetable_js.network-response`) and its
+instantiation in `class/user.js`:
+`new IntermediateTable(this, 'user_groups', 'user_id', 'group_id')`.
+
+- **Add** (supports multiple groups per call):
+  `POST /create_objects.fcgi {"object":"user_groups","values":[{"group_id":<gid>,"user_id":<uid>}, ...]}`
+- **Remove:**
+  `POST /destroy_objects.fcgi {"object":"user_groups","where":{"user_groups":{"group_id":[<gid>,...],"user_id":<uid>}}}`
+
+### Cards (`cards`) — Task 0.4
+`Card` is defined inline inside `class/user.js` (no separate
+`class/card.js` file exists), `BaseClass.call(this, Card, $messenger,
+'cards', 'id', ['id'], null, null)`.
+
+- **Add:**
+  `POST /create_objects.fcgi {"object":"cards","values":[{"user_id":<uid>,"value":<numericCardValue>}]}`
+  → response `{"ids":[<newCardId>]}`.
+- **Remove:**
+  `POST /destroy_objects.fcgi {"object":"cards","where":{"cards":{"id":[<cardId>,...]}}}`
+- **`value` encoding:** packed integer, `value = areaCode * 4294967296 +
+  cardNumber` (a facility/site code and a raw card number combined into
+  one number, per `Card.setValue(area, id)`/`getName()`'s inverse). The
+  SDK should expose `addCard(userId, areaCode, cardNumber)` (or an
+  equivalent explicit pair), not a free-form string.
+
+### Administrator flag (`user_roles`) — Task 0.5
+`class/user.js`, `function UserRole()`, `BaseClass.call(this, UserRole,
+$messenger, 'user_roles', 'user_id', ['user_id'], null, null)`. The
+real UI's own `save()` is **asymmetric** — it only issues a write when
+transitioning state, and only one direction at a time:
+
+- **Grant** (not currently an admin role row):
+  `POST /create_objects.fcgi {"object":"user_roles","values":[{"user_id":<uid>,"role":1}]}`
+- **Revoke** (currently loaded as an admin role row):
+  `POST /destroy_objects.fcgi {"object":"user_roles","where":{"user_roles":{"user_id":<uid>,"role":1}}}`
+- Granting an already-admin user or revoking a non-admin user is a
+  no-op in the real UI (neither branch fires) — the SDK's
+  `setAdministrator` should check current state first and skip a
+  redundant call, matching this behavior.
+
+### Image (`user_set_image` / `user_destroy_image`) — Task 0.6
+`class/user.js`'s `User.save(...)`, lines 253–259, and
+`MessengerUtil.sendFile` (`en_US/js/messenger.js`, lines 25–27).
+
+- **Set:** `sendFile('user_set_image', bytesFoto, 'user_id='+id)` →
+  `POST /user_set_image.fcgi?user_id=<id>`, `Content-Type:
+  application/octet-stream`, body = **raw image bytes directly** — no
+  multipart, no base64/JSON envelope.
+- **Remove:** `MessengerUtil.send('user_destroy_image', {'user_id':
+  id})` → `POST /user_destroy_image.fcgi {"user_id": <id>}`,
+  `Content-Type: application/json` (the normal `.send()` path).
+- Read (already `LIVE_CONFIRMED` elsewhere, unchanged by this plan):
+  `GET /user_get_image.fcgi?user_id=<id>` → raw JPEG.
+
+**Image encoding requirement — `LIVE_CONFIRMED` (2026-09-12, Group 5
+attempt #2, this plan's own live test):** the device requires the
+`user_set_image` body to be a **JPEG-encoded** image — `bytesFoto`
+itself is not "whatever bytes the caller has"; `newusers.js`'s
+`UploadFoto()` (lines 1021–1037) always re-encodes an uploaded image
+via `canvas.toDataURL("image/jpeg", 0.92)` before calling
+`GeraBytesFotos()`/`sendFile`, regardless of the original upload's
+format. This was missed in the original Task 0.6 static read (which
+only traced `User.save()`'s call to `sendFile`, not `newusers.js`'s own
+upload-handling code that builds `bytesFoto` in the first place) and
+caught live: sending a **PNG** file's raw bytes directly (this plan's
+own test's original sample image, unconverted) produced
+`unexpected HTTP status 400 from /user_set_image.fcgi` — the device
+rejected non-JPEG image data. Confirmed by re-encoding the same sample
+image to JPEG (via a one-off local conversion, not shipped SDK code)
+and retrying: the device accepted it. This is consistent with
+`user_get_image.fcgi`'s own confirmed `image/jpeg` response
+content-type (`docs/amico-endpoints.md`) — the device stores and serves
+this field as JPEG specifically, not an arbitrary image format.
+**SDK implication:** `AmicoClient::UsersApi::setImage()` requires
+JPEG-encoded bytes from the caller; this SDK does not perform any
+image-format conversion itself (no image-processing dependency was
+introduced for this MVP pass) — see `include/amico/Client.hpp`'s
+updated doc comment.
+
+**MAJOR correction — `LIVE_CONFIRMED` (2026-09-13, Group 5 attempt #3):
+`user_set_image` is not a purely cosmetic photo store; it enrolls/
+updates a face-recognition template, and requires 2 more query params.**
+The JPEG fix above (attempt #2) was necessary but not sufficient — a
+correctly-JPEG-encoded upload still got HTTP 400 on attempt #3. Rather
+than guess further, this was investigated via direct browser evidence:
+the real Add-User modal's own photo upload (using a real sample photo,
+through a disposable test user, cleaned up immediately after) was
+captured live. Two things `class/user.js`'s (vestigial, still-present
+but not the actually-exercised) `User.save()` did not show:
+
+1. **The real call site is in `en_US/js/CID.js`** (a generic,
+   config-driven form-field save framework used by the Users page — not
+   previously discovered), not `class/user.js`. Its actual call:
+   ```js
+   var timestamp = parseInt(new Date().getTime()/1000);
+   var res = MessengerUtil.sendFile('user_set_image', btFoto,
+       'user_id=' + obj.id + '&match=1' + '&timestamp=' + timestamp);
+   ```
+   Confirmed exact URL from a live capture:
+   `POST /user_set_image.fcgi?user_id=<id>&match=1&timestamp=<unix_epoch_seconds>`.
+   Omitting `match`/`timestamp` (this plan's original implementation)
+   was the actual cause of the persistent HTTP 400 — not the image
+   content itself.
+2. **The response is a face-detection/quality-scoring result, not a
+   generic ack:** on success,
+   `{"scores":{"bounds_width":...,"horizontal_center_offset":...,"vertical_center_offset":...,"center_pose_quality":...,"sharpness_quality":...},"success":true}`
+   (captured live from a real face photo). On failure, either a
+   top-level `error` string, or
+   `{"success":false,"errors":[{"code":<n>,"message":"...", "info"?:{...}},...]}`
+   — `CID.js`'s own `facialErrorToStr()` enumerates the codes: `0`
+   UNKNOWN, `1` FAIL, `2` FACE_NOT_DETECTED, `3` FACE_EXISTS, `4`
+   FACE_NOT_CENTERED, `5` FACE_TOO_DISTANT, `6` FACE_TOO_CLOSE, `7`
+   FACE_POSE_NOT_CENTERED, `8` FACE_LOW_SHARPNESS, `9`
+   FACE_TOO_CLOSE_TO_BORDERS, `10` FACE_MASK_NOT_ALLOWED, `11`
+   FACE_IMAGE_GRAYSCALE, `12` (multiple faces in image — reuses code 11
+   in the source, likely a copy-paste artifact in the real UI, not this
+   SDK's concern).
+3. **Removing an image also removes the face_templates rows for that
+   user**, in the same real-UI code path:
+   ```js
+   MessengerUtil.send('user_destroy_image', {'user_id': obj.id});
+   MessengerUtil.send('destroy_objects', { object: 'face_templates', where: { face_templates: { user_id: obj.id } } });
+   ```
+
+**What this means for this plan's scope:** spec.md's Decision 4 modeled
+`user_set_image` as a cosmetic profile photo, explicitly distinct from
+real face-recognition enrollment (`remote_enroll`) — that assumption is
+now known to be **wrong**: the same endpoint performs both. This SDK's
+`setImage()`/`removeImage()` are updated to match the confirmed
+behavior exactly (match/timestamp params; face-validation-aware error
+handling; paired `face_templates` deletion on remove) — see
+`include/amico/Client.hpp`'s updated doc comments and `DECISION_LOG.md`'s
+2026-09-13 entries. Whether this single confirmed enrollment path is
+sufficient for reliable face recognition in practice (recognition
+accuracy, number of angles/samples needed, etc.) is **not established**
+by this finding — that remains matched to the already-deferred,
+hardware-dependent face-enrollment scope (multi-angle `remote_enroll`
+capture) for a future plan.
+
+### `hasPassword` derivation — Task 0.7 (`JS_CONFIRMED`, not `LIVE_CONFIRMED` — see note)
+No `COUNT`-style aggregate for "password is set" exists in
+`messenger.js`'s generic query engine (`$dataWhere` supports only
+equality / array-membership / a `%wildcard%` string match — no
+`$ne`/`IS NOT NULL` operator of any kind). Instead, `class/user.js`'s
+own `validate()` (line 187) special-cases the literal string `"*****"`
+for the `password` field
+(`if(data.password != '*****' && !ValidateUtil.isNumber(data.password))`),
+which only makes sense if the server's `load_objects` response for an
+existing user's `password` field is a **fixed masked sentinel**
+(`"*****"`) when a password is set, never the real hash — i.e. the
+device never transmits the real password/salt back to the client on
+any read path, on any table.
+
+**This session attempted to verify this live** — a same-origin
+browser-side check that compared the raw `password` field against
+candidate sentinel strings and returned only a category (never the raw
+value itself back to the agent), specifically designed to respect the
+hard boundary against ever handling a real password/salt value even
+during discovery. **The request was blocked before it ran by the
+session's own safety classifier** (reason: "Credential Materialization").
+This finding therefore remains `JS_CONFIRMED` (static code read) —
+genuinely `LIVE_CONFIRMED` only once Group 5's Task 5.4 (`setPassword`
+live test, itself separately gated) exercises it.
+
+**Design (recommended, pending explicit user/Planner sign-off before
+Group 1's Task 1.5 is implemented):** the `hasPassword` query requests
+`fields:["password"]` via `load_objects` and computes
+`hasPassword = (raw != null && raw != "")`. Since the static evidence
+above indicates the server never returns the real hash on this or any
+path, this raw value is a safe, non-secret placeholder to hold
+transiently in SDK memory — but `AmicoUser` must never store or expose
+the raw string itself, only the resulting boolean.
 
 Static limitations: no endpoint was exercised, no downloaded content was produced, and no server-side side effects or access checks were verified. Export replies are treated as text by these handlers; content types and full file grammars remain unconfirmed. Error fields are documented only where consumed. Names beginning with `get`/`has` or containing `status` are classified by caller behavior, not used as proof of server-side read-only guarantees.

@@ -30,3 +30,38 @@ into permanent git history. Recommend the Executor double-check
 Task 2.3's commit, exactly as Task 2.2's own verification already
 specifies — do not skip that check even though it looks redundant with
 `.gitignore` already being correct.
+
+---
+
+## Re-review addendum (2026-09-12, post-execution) — `PLAN_DRIFT_DETECTED` re-entry
+
+**Why this plan re-entered review:** Groups 1–4 were fully executed and
+mechanically `eng verify`-PASSed (see `tests.md`, `sprint-summary.md`)
+*before* `eng plan drift` was run. When it was finally run, it correctly
+reported `PLAN_DRIFT_DETECTED` — the ~325 files this plan itself
+committed had all changed since `planned_at.git_sha` (`2ff9b0e`, the SHA
+at plan-scaffold time). This is **not** a case of a third party changing
+source out from under this plan; it is this plan's own approved, spec'd,
+already-completed work (see `DECISION_LOG.md`'s two entries this same
+date on `write_scope` and drift). `planned_at.git_sha` was updated to the
+post-execution HEAD (`d6ec03d`) to reflect this, and the plan was
+mechanically routed back through `PLANNED` for a fresh review pass.
+
+**Re-review finding:** `spec.md`/`tasks.md`/`tests.md` are unchanged in
+substance from the original review above — no new requirement, no scope
+change, no architecture change. `eng verify` already reports PASS against
+the corrected `write_scope`. All of the original checklist findings above
+still hold. The only two additions since the original review are
+documented, non-scope-changing corrections in `DECISION_LOG.md`
+(`write_scope` needed literal file paths, not directory prefixes) — both
+housekeeping fixes to the plan's own governance bookkeeping, not to its
+technical content.
+
+**Verdict:** APPROVED (re-affirmed), no changes requested.
+**Process note for future plans:** run `eng plan drift <plan-dir>`
+*immediately after* `eng workflow advance` moves a plan to `APPROVED`,
+before any task execution begins — not after. For any plan whose own
+purpose is a large one-time git/tracking operation (like this one), expect
+`eng plan drift` to trigger on the plan's own output afterward; the fix is
+updating `planned_at.git_sha` post-execution and re-affirming review, as
+done here, not re-doing the underlying work.

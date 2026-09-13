@@ -54,6 +54,108 @@ and performs exactly one operation:
 
 None of these are run automatically — they require a real device.
 
+## Users API: create / update / remove (write, Giai đoạn 2)
+
+Only `name` and `registration` are writable — no password/credential
+field is accepted anywhere in this API (see `include/amico/Types.hpp`'s
+`NewUser`/`UserUpdate` doc comments for why: static protocol discovery
+found no evidence the real Web UI itself can set `user_type_id`/
+`begin_time`/`end_time`, so this SDK does not invent that capability).
+
+```cpp
+amico::AmicoClient client(config);
+client.login();
+
+amico::NewUser newUser;
+newUser.name = "Test User";
+newUser.registration = "TEST-001";
+int64_t id = client.users().create(newUser);   // returns the device-assigned id
+
+amico::UserUpdate change;
+change.id = id;
+change.name = "Test User (renamed)";           // registration left unset -- not sent
+client.users().update(change);
+
+client.users().remove(id);
+
+client.logout();
+```
+
+`create()` throws `ProtocolError` if the response has no `ids` array.
+`update()`/`remove()` throw `ProtocolError` if the response's `changes`
+count is not a positive integer (covers both an explicit device-side
+error and a silent no-op, e.g. an unknown id).
+
+## Users API: rich profile — groups, cards, administrator, image, PIN (write, Giai đoạn 2b)
+
+`get(id)`/`list()` now also populate `groupIds`/`groupCount`,
+`cardCount`, `isAdministrator`, `faceCount`, `bioCount`, `hasPassword`,
+and `imageUrl` on every returned `AmicoUser` — at the cost of 6 extra
+requests per user (see `docs/ui-action-protocol-map.md`'s "Users
+rich-profile write commands" section for the exact query shapes).
+
+```cpp
+amico::AmicoUser user = *client.users().get(id);
+user.groupCount;       // == user.groupIds.size()
+user.cardCount;
+user.isAdministrator;
+user.faceCount;        // count only -- never raw template bytes
+user.bioCount;         // count only (e.g. fingerprint)
+user.hasPassword;      // bool only -- the actual PIN/password is never
+                       // retrievable through this SDK, by design
+user.imageUrl;         // "/user_get_image.fcgi?user_id=<id>" -- a URL,
+                       // not pre-fetched bytes
+
+// Groups
+client.users().addToGroup(id, groupId);
+client.users().removeFromGroup(id, groupId);
+
+// Cards -- `value` is packed from a facility/site code and a raw card
+// number (areaCode * 4294967296 + cardNumber), matching the real
+// device's own encoding.
+int64_t cardId = client.users().addCard(id, /*areaCode=*/0, /*cardNumber=*/12345);
+client.users().removeCard(cardId);
+
+// Administrator -- a no-op if the user is already in the requested
+// state, matching the real Web UI's own asymmetric grant/revoke logic.
+client.users().setAdministrator(id, true);
+
+// Profile image -- raw bytes, application/octet-stream wire format
+// (confirmed live 2026-09-12; not multipart, not base64 JSON).
+// MUST be JPEG-encoded -- the device rejects other formats (e.g. PNG)
+// with HTTP 400 (confirmed live 2026-09-12). This SDK does not convert
+// image formats; the caller provides JPEG bytes.
+// IMPORTANT (confirmed live 2026-09-13): this is NOT a purely cosmetic
+// photo -- the device runs face-detection/quality validation and
+// enrolls/updates the user's face-recognition template. setImage()
+// throws ProtocolError if the device rejects the image (face not
+// detected, not centered, too distant/close, low sharpness, multiple
+// faces, etc. -- the exception message includes the device's details).
+// removeImage() also removes the user's face_templates rows, matching
+// the real Web UI's own paired behavior.
+std::vector<uint8_t> jpegBytes = /* ... */;
+client.users().setImage(id, jpegBytes);
+client.users().removeImage(id);
+
+// Password/PIN -- SET-only. This SDK hashes via the device's own
+// user_hash_password command before sending; there is no API to read
+// a password/salt value back, ever (see
+// docs/ui-action-protocol-map.md's "hasPassword derivation" section
+// and the project's feedback_never_expose_password_hash.md memory for
+// why). If an operator forgets their PIN, the fix is to set a NEW one
+// -- there is no way to recover the old one, by design and in
+// principle (the device only ever stores a one-way hash+salt).
+client.users().setPassword(id, "12345");
+```
+
+**Always ask the user for a fresh, explicit confirmation before calling
+`setPassword()` or `setAdministrator()` against the live device** —
+these join the "always ask before each live execution" tier alongside
+firmware/credential-change commands (see
+`feedback_write_api_risk_tiers.md`). `addToGroup`/`removeFromGroup`/
+`addCard`/`removeCard`/`setImage`/`removeImage` do not require this
+extra per-attempt confirmation.
+
 ## Run the gated live smoke test
 
 Running against a real device requires `AMICO_ENABLE_LIVE_TESTS=1`,

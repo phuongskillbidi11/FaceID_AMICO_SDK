@@ -1,0 +1,589 @@
+var MessengerUtil = function(){
+	return{
+		sendAsync : function(command, data, params, isPost, cb){
+			if(data != null){
+				if('join' in data){
+					data.join = data.join.toUpperCase();
+					console.log(data)
+				}
+
+				data = Main.bigJSONstringify(data);
+			}
+			return this.internalSend(isPost === false ? 'GET' : 'POST', 'application/json', command, data, params, true, cb);
+		},
+
+		send : function(command, data, params, isPost){
+			if(data != null){
+				if('join' in data){
+					data.join = data.join.toUpperCase();
+				}
+				data = Main.bigJSONstringify(data);
+			}
+			return this.internalSend(isPost === false ? 'GET' : 'POST', 'application/json', command, data, params, false);
+		},
+
+		sendFile : function(command, data, params){
+			return this.internalSend('POST', 'application/octet-stream', command, data, params, false);
+		},
+
+		internalSend : function(type, contentType, command, data, params, isAsync, cb){
+			var url = '/' + command + '.fcgi';
+			if(params != null)
+				url += '?' + params;
+			var dataOut = null;
+			var contents = {
+				url: url,
+				async: isAsync,
+				processData: false,
+				type: type,
+				contentType: contentType,
+				success: function(result){
+						dataOut = result;
+						if(cb)
+							return cb(dataOut);
+				},
+				error: function (result) {
+					if(result.readyState != 4) {
+						dataOut = {status: result.status, error: 'Unexpected error'};
+						if ((window.location.href).includes("configurations.html")) {
+							location.reload();
+						}
+					}
+					else
+						dataOut = !result.responseJSON ? JSON.parse(result.responseText) : result.responseJSON;
+
+					Main.sessionFail(dataOut, null);
+					console.log(dataOut);
+					if(cb)
+						return cb(dataOut);
+				}
+			};
+			if(data != null)
+				contents.data = data;
+			$.ajax(contents);
+			return dataOut;
+		}
+	}
+}();
+
+function Messenger(objectInstance) {
+	var $data = {};
+	var $objectInstance = objectInstance;
+	var $loaded = false;
+	var $fields = null;
+
+//////////////////////////// USER METHODS///////////////////////////////////
+	this.isLoaded = function(){
+		return $loaded;
+	};
+
+	this.loaded = function(){
+		$loaded = true;
+	};
+
+	var $verifyData = function(obj){
+		if(obj.getId && (obj.getId() == null || obj.getId() === '')){
+			obj.setName('(Not recognized)');
+		}else if(obj.getName && (obj.getName() == null || obj.getName() == '' || obj.getName().length <= 0))
+			obj.setName('(id: '+ obj.getId() + ')');
+	};
+
+	this.load = function(id, realData){
+		$clearData($objectInstance.getTable());
+		var aux = {};
+		aux[$objectInstance.getTableKey()] = parseInt(id);
+		$dataWhere($objectInstance.getTable(), aux);
+
+		var data = $loadStorageClass($objectInstance.getTable(), id);
+		if(data == null){
+			data = $send(true, 'load_objects');
+			$addStorageClass($objectInstance.getTable(), data, id);
+		}
+
+		data[$objectInstance.getTable()].forEach(function(row){
+			$objectInstance.parse(row);
+		});
+		if($objectInstance.getTable() === 'users')
+			$objectInstance.setId(id);
+		if(realData != true)
+			$verifyData($objectInstance);
+		this.loaded();
+	};
+
+	this.save = function(values){
+		if($loaded == true)
+			return this.modify(values);
+		else
+			return this.create([values]);
+	};
+
+	this.modify = function(values){
+		$removeStorage([$objectInstance.getId()]);
+		var aux = {};
+		aux[$objectInstance.getTableKey()] = $objectInstance.getId();
+		$clearData($objectInstance.getTable());
+		$dataValues(values);
+		$dataWhere($objectInstance.getTable(), aux);
+		var data = $send(true, 'modify_objects');
+		if(data.error)
+			return data;
+		else
+			return  data.changes > 0;
+	};
+
+	this.create = function(values){
+		$removeStorage([null]);
+		$clearData($objectInstance.getTable());
+		$dataValues(values);
+
+		var data = $send(true, 'create_objects');
+		if(data.error)
+			return data;
+		else{
+			if(typeof $objectInstance.setId == 'function')
+				$objectInstance.setId(data.ids[0]);
+			return true;
+		}
+	};
+
+	this.remove = function(ids){
+		$removeStorage(ids);
+		var aux = {};
+		aux[$objectInstance.getTableKey()] = ids;
+		$clearData($objectInstance.getTable());
+		$dataWhere($objectInstance.getTable(), aux);
+		var data = $send(true, 'destroy_objects');
+		if(data.changes)
+			return true;
+		else
+			return data;
+	};
+
+	this.removeWhere = function(where){
+		$removeStorage(null);
+		$clearData($objectInstance.getTable());
+		$dataWhere($objectInstance.getTable(), where);
+
+		return $send(true, 'destroy_objects') != null;
+	};
+
+
+	this.count = function(find, where){
+		$clearData($objectInstance.getTable());
+		$dataFields(["COUNT(*)"]);
+		$dataWhere($objectInstance.getTable(), where, find);
+
+		var data = $loadStorageCount(null);
+		if(data == null){
+			data = $send(true, 'load_objects');
+			$addStorageCount(null, data);
+		}
+		var count = 0 ;
+		if(!data.error){
+			data[$objectInstance.getTable()].forEach(function(row){
+				count = row['COUNT(*)'];
+			});
+		}
+		return count;
+	};
+
+	this.countListBy = function(lst, byObjectInstance, callbackItem){
+		var dicLst = {};
+		var aux = {};
+		//var fild = byObjectInstance.getTable()+'.'+byObjectInstance.getTableKey()
+		aux[$objectInstance.getTableKey()] = [];
+		lst.forEach(function(item){
+			aux[byObjectInstance.getTableKey()].push(item.getId());
+			dicLst[item.getId()] = item;
+		});
+		$clearData(byObjectInstance.getTable());
+		$dataWhere($objectInstance.getTable(), aux, null);
+		$dataFields(['COUNT(*)']);
+
+		var data = $loadStorageCount(byObjectInstance);
+		if(data == null){
+			data = $send(true, 'load_objects');
+			$addStorageCount(byObjectInstance, data);
+		}
+		var count = 0;
+		if(!data.error){
+			data[byObjectInstance.getTable()].forEach(function(row){
+				//callbackItem(dicLst[row[fild]], count++);
+				row['COUNT(*)'];
+			});
+		}
+	};
+
+	this.countBy = function(byObjectInstance, find){
+		var aux = {};
+		aux[$objectInstance.getTableKey()] = $objectInstance.getId();
+		$clearData(byObjectInstance.getTable());
+		$dataWhere($objectInstance.getTable(), aux, find);
+		$dataFields(["COUNT(*)"]);
+
+		var data = $loadStorageCount(byObjectInstance);
+		if(data == null){
+			data = $send(true, 'load_objects');
+			$addStorageCount(byObjectInstance, data);
+		}
+		var count = 0;
+		if(!data.error){
+			data[byObjectInstance.getTable()].forEach(function(row){
+				count = row['COUNT(*)'];
+			});
+		}
+		return count;
+	};
+
+	this.list = function(start, size, find, order, where){
+		$clearData($objectInstance.getTable());
+		$dataPage(start, size);
+		$dataOrder($objectInstance, order);
+		$dataWhere($objectInstance.getTable(), where, find);
+
+		var lst = [];
+		var data = $loadStorageList(null);;
+		if(data == null){
+			data = {};
+			data = $send(true, 'load_objects');
+			$addStorageList(null, data);
+		}
+
+		if(!data.error){
+			data[$objectInstance.getTable()].forEach(function(item){
+				var obj = $objectInstance.new();
+				obj.parse(item);
+				$verifyData(obj);
+				lst.push(obj);
+			});
+		}
+
+
+		return lst;
+	};
+
+	this.listBy = function(byObjectInstance, start, size, order, find, where){
+		if($objectInstance.getId() == null)
+			return [];
+		this.setFields(byObjectInstance.getFieldsSimple());
+		$clearData(byObjectInstance.getTable());
+		var aux = {};
+		aux[$objectInstance.getTableKey()] = $objectInstance.getId();
+
+		$dataWhere($objectInstance.getTable(), aux, find);
+		if(where != null){
+			Object.keys(where).forEach(function(key) {
+				$data['where'][key] = where[key];
+			});
+		}
+		$dataPage(start, size);
+		$dataOrder(byObjectInstance, order);
+
+		var lst = [];
+		var data = $loadStorageList(byObjectInstance);
+		if(data == null){
+			data = {};
+			data = $send(true, 'load_objects');
+			$addStorageList(byObjectInstance, data);
+		}
+		if(!data.error){
+			data[byObjectInstance.getTable()].forEach(function(item){
+				var obj = byObjectInstance.new();
+				obj.parse(item);
+				$verifyData($objectInstance);
+				lst.push(obj);
+			});
+		}
+
+		return lst;
+	};
+
+
+	this.join = function(myList, newList){
+		var lstIn = [];
+		var lstOut = [];
+
+		myList.forEach(function(item){
+			var isOut = true;
+			newList.forEach(function(itemIn){
+				if(itemIn.getId() == item.getId()){
+					isOut = false;
+					return;
+				}
+			});
+
+			if(isOut == true)
+				lstOut.push(item);
+			else
+				lstIn.push(item);
+		});
+
+		return [ lstIn, lstOut ];
+	};
+
+///////////////////////////////////////////////////////////////////////////
+
+
+
+///////////////////////////////////////////////////////////////////////////
+
+
+	var $clearData = function(object){
+		$data = {};
+		$data['object'] = object;
+		if($fields != null){
+			$data.fields = $fields;
+		}
+	};
+
+
+	var $dataValues = function(values){
+		if(values != null)
+			$data.values = values;
+	};
+
+	var $dataOrder = function(byObjectInstance, order){
+		if(byObjectInstance.getTableOrder){
+			if(order == null)
+				order = byObjectInstance.getTableOrder();
+			$data.order = order;
+		}
+	};
+
+	this.setFields = function(filds){
+		if(filds != null)
+			 $fields = filds;
+	};
+
+	var $dataWhere = function(table, where, find){
+		var where2 = null;
+		if(where != null && jQuery.isArray(where)){
+			where2 = where[1];
+			where = where[0];
+		}
+		if(find != null && find.length > 0){
+			if(isNaN(find)){
+				if(where == null)
+					where = { 'name' : '%' + find + '%' };
+				else if(find != null && find.length > 0)
+					where['name'] = '%' + find + '%';
+			}else{
+				if(where == null)
+					where = { 'id' : parseInt(find) };
+				else if(find != null && find.length > 0)
+					where['id'] = parseInt(find);
+			}
+		}
+
+		var aux = {};
+		if(where2 != null)
+			aux = where2;
+		if(where != null){
+			aux[table] = where;
+		if(Object.keys(aux).length > 0)
+			$data.where = aux;
+		}
+	};
+
+	var $dataFields = function(fields){
+		if(fields != null)
+			$data.fields = fields;
+	};
+
+	var $dataPage = function(start, size){
+		if(start != null)
+			$data.offset  = start;
+
+		if(size != null)
+			$data.limit  = size;
+	};
+
+	var $send = function(isGet, command){
+		$fields = null;
+		return MessengerUtil.send(command, $data);
+	};
+
+///////////////////////////////////////////////////////////////////////////
+
+
+
+////////////////////////////// STORAGE ///////////////////////////////////
+
+
+	var $addStorageList = function(objBy, lst){
+		if(lst == null)
+			return false;
+		var tableId;
+		var table;
+		var finalTable;
+		var newLst;
+		var obj;
+		if(objBy != null){
+			if($objectInstance.getId)
+				id = $objectInstance.getId();
+			finalTable = 'LIST_' + objBy.getTable() + '_By_' + $objectInstance.getTable() + '_' + id;
+			table = objBy.getTable();
+			tableId = objBy.getTableKey();
+		}
+		else{
+			finalTable = 'LIST_' + $objectInstance.getTable();
+			table = $objectInstance.getTable();
+			tableId = $objectInstance.getTableKey();
+		}
+
+		finalTable += '<>'+btoa(Main.bigJSONstringify($data));
+		var newLst = {};
+		newLst.itens = [];
+		lst[table].forEach(function(data){
+			var newList = [];
+			var aux = {};
+			aux[table] = [data];
+			$addStorageClass(table, aux, data[tableId]);
+			newLst.itens.push(data[tableId]);
+		});
+		$addStorage(finalTable , newLst);
+
+	};
+	var $loadStorageList = function(objBy){
+		var out = null;
+		var itens = null;
+		var table;
+		if(objBy == null){
+			table = $objectInstance.getTable();
+			if(table != 'access_logs' || Object.keys($data.where.access_logs).length > 0)
+				itens = $loadStorage('LIST_' + $objectInstance.getTable()+'<>'+btoa(Main.bigJSONstringify($data)));
+		}else{
+			var id = 0;
+			if($objectInstance.getId)
+				id = $objectInstance.getId();
+			itens = $loadStorage(finalTable = 'LIST_' + objBy.getTable() + '_By_' + $objectInstance.getTable() + '_' + id+'<>'+btoa(Main.bigJSONstringify($data)));
+			table = objBy.getTable();
+		}
+
+
+		if(itens != null){
+			out = {};
+			out[table] = [];
+			itens.itens.forEach(function(id){
+				var data = $loadStorageClass(table, id);
+				if(data != null)
+					out[table].push(data[table][0]);
+			});
+		}
+
+		return out;
+	};
+
+	var $addStorageCount = function(objBy, data){
+		if(data == null)
+			return false;
+		var table;
+		if(objBy == null)
+			table = 'COUNT_' + $objectInstance.getTable()
+		else
+			table = 'COUNT_' + objBy.getTable() + '_By_' + $objectInstance.getTable() + '_' + $objectInstance.getId();
+
+		table += '<>'+btoa(Main.bigJSONstringify($data));
+		$addStorage(table , data);
+	};
+	var $loadStorageCount = function(objBy){
+		var table;
+		if(objBy == null)
+			table = 'COUNT_' + $objectInstance.getTable()
+		else
+			table = 'COUNT_' + objBy.getTable() + '_By_' + $objectInstance.getTable() + '_' + $objectInstance.getId();
+		table += '<>'+btoa(Main.bigJSONstringify($data));
+		return $loadStorage(table);
+	};
+
+	var $addStorageClass = function(table, data, id){
+		if(table == null || data == null || id == null)
+			return false;
+		else{
+			var key = 'CLASS_' + table + '_' + id;
+			if($data.fields)
+				key += '<>'+btoa(Main.bigJSONstringify($data.fields));
+			$addStorage(key, data);
+		}
+	};
+	var $loadStorageClass = function(table, id){
+		//var aux = $loadStorage('CLASS_' + table + '_' + id);
+		//aux[table][0].name = '*' + aux[table][0].name;
+		var key = 'CLASS_' + table + '_' + id;
+		if($data.fields)
+			key += '<>'+btoa(Main.bigJSONstringify($data.fields));
+		return $loadStorage(key);
+	};
+
+
+
+
+	var $addStorage = function(key, data){
+		try{
+			if(key.indexOf('access_logs') == -1){
+				var dt = new Date();
+				dt.setMinutes(dt.getMinutes()+5);
+				data.storageExpire = dt.getTime();
+				localStorage.setItem(key, Main.bigJSONstringify(data));
+			}
+		}catch(err){}
+	};
+	var $loadStorage = function(key){
+		var out = null;
+		if(localStorage){
+			var data = localStorage.getItem(key);
+			if(data != null){
+				data = JSON.parse(data);
+				if(new Date().getTime() < data.storageExpire){
+					out = data
+				}
+			}
+		}
+		return out;
+	};
+	var $removeStorage = function(ids){
+		if(localStorage){
+			for (var trueKey in localStorage){
+				var key = trueKey.split('<>')[0];
+				if(
+					key.indexOf('LIST_' + $objectInstance.getTable()) == 0||
+					key.indexOf('COUNT_' + $objectInstance.getTable()) == 0
+				){
+					localStorage.removeItem(trueKey);
+				}else if(key.indexOf('CLASS_'+$objectInstance.getTable()) == 0){
+					if(ids!=null){
+						ids.forEach(function(id){
+							if(key.indexOf('CLASS_'+$objectInstance.getTable()+'_'+id) == 0)
+							localStorage.removeItem(trueKey);
+						});
+					}
+				}
+				else if(key.indexOf('_By_' + $objectInstance.getTable() + '_') > -1){
+					if(ids!=null){
+						ids.forEach(function(id){
+							var end = '_By_' + $objectInstance.getTable() + '_' + id;
+							if(key.indexOf(end) + end.length == key.length){
+								localStorage.removeItem(trueKey);
+							}
+						});
+					}
+				}
+			}
+		}
+	};
+
+
+	/*var $removeStorage = function(label){
+		if(localStorage){
+			var lbl = '';
+			if(label != null)
+				lbl = '_' + label;
+			localStorage.removeItem(objectInstance.getTable() + lbl + '_' + $objectInstance.getId());
+		}
+	};*/
+
+
+///////////////////////////////////////////////////////////////////////////
+
+
+}

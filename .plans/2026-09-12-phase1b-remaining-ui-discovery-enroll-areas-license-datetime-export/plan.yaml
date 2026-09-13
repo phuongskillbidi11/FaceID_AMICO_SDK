@@ -1,0 +1,27 @@
+plan: 2026-09-12-phase1b-remaining-ui-discovery-enroll-areas-license-datetime-export
+risk_level: feature
+planned_at:
+    git_sha: d6ec03df1d21286fb5b4a2fcaa652a8a7c1e56bd
+state: APPROVED
+write_scope:
+    - docs/ui-action-protocol-map.md
+    - artifacts/ui-action-map.json
+    - artifacts/live_capture/**
+    - captures/screenshots/**
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-12T09:59:49Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-12T10:25:34Z"
+spec_approved_at: "2026-09-12T09:57:23Z"
+spec_approved_by: 'user (chat message, verbatim): ''Tiếp tục Phase 1b theo NORMAL workflow... Tiếp tục từ spec hiện có và cho tôi biết approval tiếp theo cần cấp'' -- confirming spec.md for Giai đoạn 1b (remaining UI discovery)'

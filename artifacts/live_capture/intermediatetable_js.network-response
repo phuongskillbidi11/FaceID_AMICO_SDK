@@ -1,0 +1,107 @@
+function IntermediateTable(element, table, tableKey, field){
+
+	var $element = element;
+	var $table = table;
+	var $tableKey = tableKey;
+	var $field = field;
+	var $messenger = new Messenger(this);
+	var $data = [];
+	
+	this.parse = function(data){
+		$data = data;
+	};
+	
+	this.getData = function(){
+		return $data;
+	}
+	
+	this.getTable = function(){
+		return $table;
+	};
+	
+	this.getTableKey = function(){
+		return $tableKey;
+	};
+	
+	this.new = function(){
+		return new IntermediateTable($element, $table, $tableKey, $field);
+	}
+	
+	this.list = function(lst, objectBy, callback){
+		var lstResult = [];
+		var where = {};
+		if(lst.length < 100){
+			var lstIds = [];
+			lst.forEach(function(item){
+				if(item != null && item.getId() != null){
+					lstIds.push(item.getId());
+				}
+			});
+			where[$tableKey] = lstIds;
+		}
+
+		lstResult = $messenger.list(null, null, null, null, where);
+	
+		
+		var lstIdForSearch = []; 
+		var lstIndexResult = {};
+		lstResult.forEach(function(res){
+			if(!lstIdForSearch[res.getData()[$field]]){
+				lstIdForSearch.push(parseInt(res.getData()[$field]));
+			}
+			if(!lstIndexResult[res.getData()[$tableKey]])
+				lstIndexResult[res.getData()[$tableKey]] = [];
+			lstIndexResult[res.getData()[$tableKey]].push(parseInt(res.getData()[$field]));
+		});
+		var where2 = {};
+		if(lstIdForSearch.length < 100)
+			where2[objectBy.getTableKey()] = lstIdForSearch;
+		var lstObjBy = {};
+		objectBy.list(null, null, null, null, where2).forEach(function(obj){
+			lstObjBy[obj.getId()] = obj;
+		});
+
+		lst.forEach(function(obj){
+			if(lstIndexResult[obj.getId()]){
+				var lstRes = [];
+				lstIndexResult[obj.getId()].forEach(function(id){
+					lstRes.push(lstObjBy[id]);
+				});
+				callback(obj, lstRes);
+			}
+		});
+	};
+	
+	this.add = function(lst){
+		var bool = true;
+		if(lst != null && lst.length > 0){
+			var lstValues = [];
+			lst.forEach(function(item){
+				if(item != null && item.getId() != null){
+					var aux = {};
+					aux[$field] = item.getId();
+					aux[$tableKey] = $element.getId();
+					lstValues.push(aux);
+				}
+			});
+			bool = $messenger.create(lstValues);
+		}
+		return bool;
+	};
+	
+	this.remove = function(lst){
+		var bool = true;
+		if(lst != null && lst.length > 0){
+			var lstValues = [];
+			$.each(lst, function(index, item){
+				if(item != null && item.getId() != null)
+					lstValues.push(item.getId());
+			});
+			var aux = {};
+			aux[$field] = lstValues;
+			aux[$tableKey] = $element.getId();
+			bool = $messenger.removeWhere(aux);
+		}
+		return bool;
+	};
+}

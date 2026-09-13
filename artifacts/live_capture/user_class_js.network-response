@@ -1,0 +1,579 @@
+function User(){
+
+	var $messenger = new Messenger(this);
+	BaseClass.call(this, User, $messenger, 'users', 'id', ['name'], null, ['id', 'name']);
+
+	var $registration;
+	var $password = null;
+
+	var $countGroup = null;
+	var $lstGroup = null;
+	var $groups = new IntermediateTable(this, 'user_groups', 'user_id', 'group_id');
+
+	var $countAccessRules = null;
+	var $lstAccessRules = null;
+	var $accessRules = new IntermediateTable(this, 'user_access_rules', 'user_id', 'access_rule_id');
+
+	var $countTimeZone = null;
+	var $lstTimeZone = null;
+
+	var $countCards = null;
+	var $lstCards = null;
+
+	var $countBio = null
+	var $countFace = null;
+	var $countCard = null;
+
+	var $role = null;
+
+// ------------------- BEGIN CARD -------------------- //
+
+	this.getCountCards = function(){
+		if($countCards == null)
+			$countCards = $messenger.countBy(new Card());
+		return $countCards;
+	}
+
+	this.getCards = function(){
+		if($lstCards == null)
+			$lstCards = $messenger.listBy(new Card());
+		return $lstCards;
+	};
+
+// ------------------- END CARD -------------------- //
+
+
+// ------------------- BEGIN USER ROLE -------------------- //
+	this.getRole = function(){
+		if($role == null){
+			var lst = $messenger.listBy(new UserRole());
+			lst.forEach(function(role){
+				if(role.getIsAdmin() == true){
+					$role = role;
+					return false;
+				}
+			});
+
+			if($role == null){
+				$role =	new UserRole();
+				$role.setId(this.getId())
+			}
+
+		}
+		return $role;
+	};
+
+	this.getIsAdmin = function(){
+		return this.getRole().getIsAdmin();
+	};
+
+	this.setIsAdmin = function(isAdmin){
+		this.getRole().setIsAdmin(isAdmin);
+	};
+// -------------------- END USER ROLE --------------------- //
+
+
+
+// --------------------- BEGIN GROUPS ---------------------- //
+
+	this.getCountGroups = function(){
+		if($countGroup == null)
+			$countGroup = $messenger.countBy(new Group());
+		return $countGroup;
+	}
+
+	this.setGroups = function(lst){
+		$lstGroup =	lst;
+	};
+
+
+	this.getGroups = function(){
+		if($lstGroup == null)
+			$lstGroup =	$messenger.listBy(new Group());
+		return $lstGroup;
+	};
+
+	this.getListGroups = function(lst){
+		$groups.list(lst, new Group(),
+			function(user, lstGroups){
+				user.setGroups(lstGroups);
+			}
+		);
+	};
+
+	this.getJoinGroups = function(lstMyGroups){
+		return $messenger.join(new Group().listAllSimple(), this.getGroups());
+	};
+
+// ------------------- END GROUPS -------------------- //
+
+
+
+// ------------------- BEGIN ACCESS RULES -------------------- //
+
+	this.getCountAccessRules = function(){
+		if($countAccessRules == null){
+			if(Main.isOnline() == false)
+				$countAccessRules = $messenger.countBy(new AccessRule(), null);
+		}
+		return $countAccessRules;
+	};
+
+	this.getAccessRulesByPortal = function(portal){
+		var where = {}
+		where[portal.getTable()] = {};
+		where[portal.getTable()][portal.getTableKey()] = portal.getId();
+		return $messenger.listBy(new AccessRule(), null, null, null, null, where);
+	};
+
+	this.getAccessRules = function(){
+		if($lstAccessRules == null){
+			$lstAccessRules = $messenger.listBy(new AccessRule(), null, null, null, null);
+		}
+		return $lstAccessRules;
+	}
+
+	this.getJoinAccessRules = function(){
+		return $messenger.join(new AccessRule().listAllSimple(), this.getAccessRules());
+	};
+
+// ------------------- END ACCESS RULES -------------------- //
+
+
+
+// ------------------- BEGIN TIME ZONE -------------------- //
+
+	this.getCountTimeZones = function(){
+		if($countTimeZone == null){
+			$countTimeZone = 0;
+			this.getAccessRules().forEach(function(rule){
+				$countTimeZone += rule.getCountTimeZones();
+			});
+		}
+		return $countTimeZone;
+	}
+
+	this.getTimeZones = function(){
+		if($lstTimeZone == null){
+			$lstTimeZone = [];
+			this.getAccessRules().forEach(function(rule){
+				rule.getTimeZones().forEach(function(zone){
+					$lstTimeZone.push(zone);
+				});
+			});
+		}
+		return $lstTimeZone;
+	}
+
+	this.getJoinTimeZones = function(){
+		return $messenger.join(new TimeZone().listAllSimple(), this.getTimeZones());
+	};
+
+// ------------------- END TIME ZONE -------------------- //
+
+
+
+// ------------------- BEGIN CRUD -------------------- //
+	this.validate = function(data){
+		var result = [];
+		if('id' in data){
+			if(!ValidateUtil.isEmpty(data.id) && !ValidateUtil.isNumber(data.id)){
+				result.push('Id must be a number');
+			}
+		}
+
+		if('password' in data){
+			if(!ValidateUtil.isEmpty(data.password)){
+				if(data.password != '*****' && !ValidateUtil.isNumber(data.password)){
+					result.push('Password must contain numbers only');
+				}else if(data.password.length > 10){
+					result.push('Password must contain at most 10 digits');
+				}
+			}
+		}
+
+		return result;
+	};
+
+	this.parse = function(data){
+		$messenger.loaded();
+		if('id' in data){
+			this.setId(data.id);
+		}
+
+		if('registration' in data){
+			this.setRegistration(data.registration);
+		}
+
+		if('name' in data){
+			this.setName(data.name);
+		}
+
+		if('password' in data){
+			this.setPassword(data.password);
+		}
+	};
+
+	this.save = function(
+		lstGroupAdd, lstGroupDel,
+		lstAccessRuleAdd, lstAccessRuleDel,
+		lstCardsAdd, lstCardsDel,
+		bytesFoto, newId, templates
+	){
+		var valid = {};
+		if(newId != null){
+			valid.id = newId;
+		}else{
+			valid.id = this.getId();
+		}
+
+		valid.password = this.getPassword();
+		var lstError = this.validate(valid);
+
+		if(lstError.length > 0){
+			return {'validate' : lstError};
+		}
+
+		var that = this;
+		var values =  {
+			"registration" : $registration,
+			"name" : this.getName()
+		};
+		if (newId != null && newId.length > 0){
+		    values.id = parseInt(newId);
+		}
+
+		if($password != null){
+			var result = MessengerUtil.send('user_hash_password', {password: $password});
+			values.password = result.password;
+			values.salt = result.salt;
+		}
+		var bool = $messenger.save(values);
+
+		if(bool === true){
+		    if (bytesFoto != null) {
+
+		        if (bytesFoto.length == 1 && bytesFoto[0] == 1)
+		        	MessengerUtil.send('user_destroy_image', {'user_id' : this.getId() });
+		        else
+		        	MessengerUtil.sendFile('user_set_image', bytesFoto, 'user_id='+this.getId());
+		    }
+
+		    if(templates != null && templates.length === 3){
+		    	var msg  = {
+	    					error: undefined,
+	    					info: "Enrolling...",
+	    				}
+	    				appLog(msg);
+
+	    		var params = 'user_id='+this.getId();
+	    		for(var i = 0; i < templates.length; i++){
+	    			params += '&size'+i+'='+templates[i].length;
+	    		}
+
+	    		var newtemplates = templates.join('');
+	    		var imgconcat = new Uint8Array(newtemplates.length);
+	    		for(var i = 0; i < newtemplates.length; i++){
+	    			imgconcat[i] = newtemplates.charCodeAt(i);
+	    		};
+
+			var data = MessengerUtil.sendFile('template_create', imgconcat, params);
+			if('error' in data) {
+				var error;
+				switch (data.error) {
+					case 'Template exists':
+						error = 'Fingerprint already enrolled';
+						break;
+					case 'Different fingerprints':
+						error = 'Fingerprints do not match';
+						break;
+					default:
+						error = data.error;
+						break;
+				}
+
+				bool = { 'error' : "Error while enrolling fingerprint: " + error };
+			}
+		    }
+
+
+			if(Main.isOnline() == false){
+
+				/*if(lstAccessRuleAdd != null){
+					for(var i = 0; i < lstAccessRuleAdd.length; i++){
+						var equip = lstAccessRuleAdd[i][0];
+						var lstAdd = lstAccessRuleAdd[i][1];
+						var lstRemove = lstAccessRuleAdd[i][2];
+						equip.getPortals().forEach(function(portal){
+							var lstRule = that.getAccessRulesByPortal(portal);
+							if(lstRule.length == 0){
+								var rule = new AccessRule();
+								rule.setName('(AccessRule_TimeZone automatically created for User ' + that.getId() + ' Equipament ' + equip.getId() + ')');
+								rule.setType(true);
+								lstRule.push(rule);
+							}
+							lstRule.forEach(function(rule){
+								rule.save(lstAdd, lstRemove, null, null, [that], null, null, null, [portal], null);
+								if(rule.getCountTimeZones() == 0)
+									rule.remove();
+							});
+						});
+					}
+				}*/
+
+				/*if(lstAccessRuleAdd != null){
+					lstAccessRuleAdd.forEach(function(tz){
+						tz.getAccessRules().forEach(function(rule){
+							rule.save(null, null, null, null, [that], null, null, null, null, null);
+						});
+					});
+
+					lstAccessRuleDel.forEach(function(tz){
+						tz.getAccessRules().forEach(function(rule){
+							rule.save(null, null, null, null, null, [that], null, null, null, null);
+						});
+					});
+				}*/
+				if(this.getCountAccessRules() == 0 && lstAccessRuleAdd.length > 0){
+					var portal_1 = new Portal();
+					portal_1.load(-1);
+					var portal_2 = new Portal();
+					portal_2.load(-2);
+					var rule = new AccessRule();
+					rule.setName('(AccessRule automatically created for User ' + this.getId() + ')');
+					rule.setType(true);
+					rule.save(lstAccessRuleAdd, null, null, null, [that], null, null, null, [portal_1, portal_2], null);
+
+				}else if(lstAccessRuleDel != null && lstAccessRuleDel.length > 0 || lstAccessRuleAdd != null && lstAccessRuleAdd.length > 0){
+					this.getAccessRules().forEach(function(rule){
+						rule.save(lstAccessRuleAdd, lstAccessRuleDel, null, null, null, null, null, null, null, null);
+					});
+				}
+				$lstAccessRules = null;
+				$countAccessRules = null;
+				$countTimeZone = null;
+				if(this.getCountTimeZones() == 0 && this.getCountAccessRules() > 0){
+					$lstAccessRules = null;
+					new AccessRule().removeObjects(this.getAccessRules());
+				}
+			}else{
+				$accessRules.add(lstAccessRuleAdd);
+				$accessRules.remove(lstAccessRuleDel);
+			}
+
+			$groups.add(lstGroupAdd);
+			$groups.remove(lstGroupDel);
+
+			if(lstCardsAdd!=null){
+				lstCardsAdd.forEach(function(card){
+					card.setUserId(that.getId());
+					card.save();
+				});
+			}
+
+			if(lstCardsDel!=null && lstCardsDel.length > 0){
+				var lstDel = [];
+				lstCardsDel.forEach(function(card){
+					if(card.getId() > 0)
+						lstDel.push(card.getId());
+				});
+				new Card().remove(lstDel);
+			}
+
+
+			this.getRole().save();
+		}
+		else{
+			if(bool.code == 2){
+				bool.error = "Maximum number of users in license exceeded";
+			}
+		}
+		return bool;
+	};
+
+
+// ------------------- END CRUD -------------------- //
+
+
+
+// ------------------- BEGIN GET/SET -------------------- //
+
+
+	this.getRegistration = function(){
+		return $registration;
+	};
+	this.setRegistration = function(registration){
+		$registration = registration;
+	};
+
+	this.getPassword = function(){
+		return $password;
+	};
+	this.setPassword = function(password){
+		$password = password;
+	};
+
+	this.getImage = function(){
+	    return '/user_get_image.fcgi?user_id=' + this.getId();
+	};
+
+	this.getCountFace = function() {
+		if ($countFace == null) {
+			var data = MessengerUtil.send('load_objects', {
+				object: "face_templates",
+				fields: ["COUNT(*)"],
+				where: { users : { id : this.getId() } }
+			});
+			data.face_templates.forEach(function(row){
+				$countFace = row['COUNT(*)'];
+			});
+		}
+		return $countFace;
+	}
+
+	this.getCountBio = function(){
+		if($countBio == null){
+			var data = MessengerUtil.send('load_objects', {
+					object: "templates",
+					fields: ["COUNT(*)"],
+					where: { users : { id : this.getId() } }
+				});
+
+			data.templates.forEach(function(row){
+				$countBio = row['COUNT(*)'];
+			});
+		}
+		return $countBio;
+	};
+	this.getCountBioAll = function(){
+		if($countBio == null){
+			var data = MessengerUtil.send('load_objects', {
+					object: "templates",
+					fields: ["COUNT(*)"],
+				});
+
+			data.templates.forEach(function(row){
+				$countBio = row['COUNT(*)'];
+			});
+		}
+		return $countBio;
+	};
+
+	this.deleteTemplates = function () {
+		MessengerUtil.send('destroy_objects', { object: 'templates', where: { templates: { user_id: this.getId() } } });
+	};
+
+// ------------------- END GET/SET -------------------- //
+};
+
+
+
+function UserRole(){
+	var $messenger = new Messenger(this);
+	BaseClass.call(this, UserRole, $messenger, 'user_roles', 'user_id', ['user_id'], null, null);
+
+	var $role = null;
+
+// ------------------- BEGIN CRUD -------------------- //
+	this.parse = function(data){
+		$messenger.loaded();
+		$role = data.role;
+		this.setId(data.user_id);
+	};
+
+	this.save = function(){
+		var bool = false;
+		if($messenger.isLoaded() == true){
+			if($role != null && this.getIsAdmin() == false)
+				bool = $messenger.removeWhere({ "user_id" : this.getId(), "role" : 1 });
+		}else if(this.getIsAdmin() == true)
+			bool = $messenger.save({ "user_id" : this.getId(), 'role' : $role});
+
+		return bool;
+	};
+
+// ------------------- END CRUD -------------------- //
+
+
+// ------------------- BEGIN GET/SET -------------------- //
+	this.setIsAdmin = function(isAdmin){
+		if(isAdmin == true)
+			$role = 1;
+		else
+			$role = 0;
+	};
+	this.getIsAdmin = function(){
+		return $role == 1;
+	};
+
+// ------------------- END GET/SET -------------------- //
+
+}
+
+
+function Card(){
+	var $messenger = new Messenger(this);
+	BaseClass.call(this, Card, $messenger, 'cards', 'id', ['id'], null, null);
+
+	var $value = null;
+	var $userId = null;
+
+
+// ---------------------- BEGIN CRUD ----------------------- //
+
+	this.parse = function(data){
+		$messenger.loaded();
+		$value = Number(data.value);
+		$userId = data.user_id;
+		this.setId(data.id);
+		this.setName(data.value);
+	};
+
+	this.save = function(){
+		var bool = $messenger.save({
+			'user_id' : $userId,
+			'value' : $value
+		});
+
+		return bool;
+	};
+
+// ---------------------- END CRUD ----------------------- //
+
+
+// ------------------- BEGIN GET/SET -------------------- //
+
+	this.getName = function(){
+		var _site_code = Math.round($value/4294967296);
+		var _id = Math.round($value%4294967296);
+		if(parseInt(_site_code) !== 0){
+			return _site_code + ',' + ("00000" + _id).slice(-5);
+		}
+		else{
+			return _id;
+		}
+	};
+
+	this.getValue = function(){
+		return $value;
+	};
+	this.setValue = function(area, id){
+		$value = Number((area * 4294967296) + id);
+	};
+
+	this.getUserId = function(){
+		return $userId;
+	};
+	this.setUserId = function(userId){
+		$userId = userId;
+	};
+
+// -------------------- END GET/SET --------------------- //
+
+
+}
+
+
+
+
+
