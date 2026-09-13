@@ -1,0 +1,13 @@
+role: executor
+plan: 2026-09-14-fix-users-add-edit-modal-move-the-face-i
+generated_at: 2026-09-13T17:06:01Z
+request: "In the real AMICO device's Add/Edit User modal, the face-image preview\n(a photo box, or a gray placeholder silhouette when none is set) plus\nits File/Remove controls sit in a **persistent panel on the right side\nof the modal**, visible no matter which tab (General/Groups/Cards/\nTime Zones/PIN/Facial) is currently selected — confirmed by this\nsession's own live screenshot of the real device's modal (`captures/\nscreenshots/` from the discovery pass, and directly re-observed live\nagain this session). Our just-shipped redesign instead put the face\nimage controls inside their own separate \"Facial\" **tab**, so the\nphoto is hidden unless that specific tab is selected — a real\ndeviation from the actual reference evidence, reported directly by the\nuser after testing on their own real browser.\n\n**Done looks like:** Opening Add/Edit User shows an image preview\n(the real photo if the user has one, or a placeholder if not) plus\nFile/Remove controls in a panel that stays visible across every tab —\nmatching the real device's own layout — while General/Groups/Cards/PIN\nremain a 4-tab set exactly as already shipped (no \"Facial\" tab\nanymore, since its one piece of content moves to the persistent\npanel).\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - testing: "matched request text"
+  - siemens-s7: "matched request text"
+  - cross-compilation: "matched request text"
+  - esp32: "matched request text"
+  - plc: "required by automation/siemens-s7"
+tools:

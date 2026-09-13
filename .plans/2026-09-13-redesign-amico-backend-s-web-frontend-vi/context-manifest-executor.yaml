@@ -1,0 +1,10 @@
+role: executor
+plan: 2026-09-13-redesign-amico-backend-s-web-frontend-vi
+generated_at: 2026-09-13T16:17:43Z
+request: "Right now `frontend/` is functional but plain (generic buttons, a flat tab bar, no visual identity). This sprint makes it visually match the real device's own web UI (`http://192.168.2.156/`) — same color palette, typography, sidebar navigation shell, table styling, and a tabbed Add/Edit User modal — **without functional changes** to what already works, and **without reusing HID's actual trademarked logo/branding**.\n\n**Done looks like:** Opening our web side-by-side with the real device's web, a user immediately recognizes the same visual language (colors, layout, modal structure) — while our own name/wordmark (not \"HID\"/the real Amico logo) is used for branding.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - reverse-engineering: "matched request text"
+  - testing: "matched request text"
+tools:

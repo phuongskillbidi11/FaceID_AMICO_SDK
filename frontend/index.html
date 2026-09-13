@@ -12,30 +12,39 @@
   <script defer src="login.js"></script>
 </head>
 <body>
-  <header><h1>AMICO Management</h1><span id="connected-device" hidden></span> <button id="logout" type="button" hidden>Logout</button></header>
+  <header class="app-header"><h1>AMICO Management</h1><span id="connected-device" hidden></span> <button id="logout" type="button" hidden>Logout</button></header>
   <div id="error-banner" role="alert" hidden><span id="error-message"></span> <button id="dismiss-error" type="button">Dismiss</button></div>
-  <section id="login-view" hidden>
-    <h2>Amico</h2>
-    <p>Web interface for device configuration</p>
-    <form id="login-form" autocomplete="off">
-      <label>Device IP / URL <input id="login-device" type="text" placeholder="http://192.0.2.1" required aria-describedby="device-help"></label>
-      <label>User <input id="login-username" type="text" value="Admin" required autocomplete="off"></label>
-      <label>Password <input id="login-password" type="password" required autocomplete="off"></label>
-      <label class="check"><input id="login-remember" type="checkbox" aria-describedby="remember-help">Remember password</label>
-      <button id="login-submit" type="submit">Log In</button>
-    </form>
-    <p id="device-help">Include http:// or https:// before the device address.</p>
-    <p id="remember-help">Remember saves only the device URL and username. Your password is never saved.</p>
+  <section id="login-view" class="login-split" hidden>
+    <div class="login-split-left">
+      <h2>AMICO Management</h2>
+      <p>Web interface for device configuration</p>
+    </div>
+    <div class="login-split-right">
+      <div class="login-card">
+        <h2>Log In</h2>
+        <form id="login-form" autocomplete="off">
+          <label>Device IP / URL <input id="login-device" type="text" placeholder="http://192.0.2.1" required aria-describedby="device-help"></label>
+          <label>User <input id="login-username" type="text" value="Admin" required autocomplete="off"></label>
+          <label>Password <input id="login-password" type="password" required autocomplete="off"></label>
+          <label class="check"><input id="login-remember" type="checkbox" aria-describedby="remember-help">Remember password</label>
+          <button id="login-submit" type="submit">Log In</button>
+        </form>
+        <p id="device-help">Include http:// or https:// before the device address.</p>
+        <p id="remember-help">Remember saves only the device URL and username. Your password is never saved.</p>
+      </div>
+    </div>
   </section>
-  <nav aria-label="Sections" hidden>
-    <button type="button" data-tab="users" aria-controls="tab-users" aria-pressed="true">Users</button>
-    <button type="button" data-tab="access-logs" aria-controls="tab-access-logs" aria-pressed="false">Access Logs</button>
-    <button type="button" data-tab="system-info" aria-controls="tab-system-info" aria-pressed="false">System Information</button>
-  </nav>
-  <main id="device-content" hidden>
-    <div id="tab-users" hidden><h2>Users</h2></div>
-    <div id="tab-access-logs" hidden><h2>Access Logs</h2></div>
-    <div id="tab-system-info" hidden><h2>System Information</h2></div>
-  </main>
+  <div class="app-shell">
+    <nav class="sidebar" aria-label="Sections" hidden>
+      <button type="button" data-tab="users" aria-controls="tab-users" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Users</span></button>
+      <button type="button" data-tab="access-logs" aria-controls="tab-access-logs" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Access Logs</span></button>
+      <button type="button" data-tab="system-info" aria-controls="tab-system-info" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>System Information</span></button>
+    </nav>
+    <main id="device-content" hidden>
+      <div id="tab-users" hidden><h2>Users</h2></div>
+      <div id="tab-access-logs" hidden><h2>Access Logs</h2></div>
+      <div id="tab-system-info" hidden><h2>System Information</h2></div>
+    </main>
+  </div>
 </body>
 </html>

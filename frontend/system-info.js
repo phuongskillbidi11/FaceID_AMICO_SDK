@@ -2,8 +2,9 @@
 
 (() => {
   const tab = document.getElementById("tab-system-info");
-  const refresh = element("button", "Refresh"); refresh.type = "button"; tab.append(refresh);
-  const list = element("dl"); tab.append(list);
+  const refresh = element("button", "Refresh"); refresh.type = "button";
+  const actions = element("div", undefined, "actions"); actions.append(refresh); tab.append(actions);
+  const list = element("dl", undefined, "system-details"); tab.append(list);
   async function load() {
     const info = await apiFetch("/system-information");
     list.replaceChildren();

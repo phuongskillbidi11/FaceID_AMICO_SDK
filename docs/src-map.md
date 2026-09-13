@@ -60,13 +60,13 @@
 
 | Path | Purpose |
 |---|---|
-| `frontend/index.html` | Login form, initially hidden device tabs, connection label, Logout, banner and script tags. |
-| `frontend/style.css` | Minimal styling: tables, dialog/modal, badges, error banner. |
+| `frontend/index.html` | Split login layout and white sidebar shell with blue header and text-only wordmark; preserves initially hidden device tabs, connection label, Logout, banner and script contracts. |
+| `frontend/style.css` | Real-device-matched blue/navy theme, 13px Roboto/system font fallback, responsive sidebar/split login, tables, accessible SVG boolean states, tabbed dialog and error banner; no external dependencies. |
 | `frontend/login.js` | Initial session check, real login, logout, expiry handling and optional deviceUrl/username storage; never persists passwords. |
 | `frontend/app.js` | Shared fetch/error/DOM helpers and tabs; gated-route 401 dispatches session-expired to return to login. |
-| `frontend/users.js` | Users tab: table (all `AmicoUser` fields), Add/Edit/Remove, group add/remove, card add/remove (session-tracked only — see the Known limitation below), image upload (client-side PNG/etc.→JPEG conversion via `<canvas>`, mirroring the real AMICO device's own technique) / remove, Administrator toggle and PIN-set (both require a real `window.confirm()` before sending — see Decision 4). |
-| `frontend/access-logs.js` | Access Logs tab: `from`/`to`/`limit` filters → `GET /access-logs`. |
-| `frontend/system-info.js` | System Information tab: recursive key/value rendering of `/system-information`'s response, including nested `network` fields. |
+| `frontend/users.js` | Users tab: table (all `AmicoUser` fields), unified Add/Edit dialog (General, Groups, Cards, PIN, Facial; four extra tabs disabled until successful create, then unlocked in place), accessible inline SVG Password/Administrator states, Remove, group add/remove, card add/remove (session-tracked only — see the Known limitation below), image upload (client-side PNG/etc.→JPEG conversion via `<canvas>`, mirroring the real AMICO device's own technique) / remove, Administrator toggle and PIN-set (both require a real `window.confirm()` before sending — see Decision 4). |
+| `frontend/access-logs.js` | Access Logs tab in the shared table/filter layout: `from`/`to`/`limit` filters → `GET /access-logs`. |
+| `frontend/system-info.js` | System Information tab with shared action toolbar and styled definition list: recursive key/value rendering of `/system-information`'s response, including nested `network` fields. |
 
 **Known limitation (tech debt, not a defect):** the backend has no
 route to list a user's existing cards (`AmicoUser` only exposes

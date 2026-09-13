@@ -1,0 +1,32 @@
+plan: 2026-09-13-redesign-amico-backend-s-web-frontend-vi
+risk_level: architecture
+planned_at:
+    git_sha: ccc48b0c6ad4440cc43cb1734807702e9f40257f
+state: APPROVED
+write_scope:
+    - frontend/style.css
+    - frontend/index.html
+    - frontend/users.js
+    - frontend/login.js
+    - frontend/access-logs.js
+    - frontend/system-info.js
+    - docs/src-map.md
+    - .plans/2026-09-13-redesign-amico-backend-s-web-frontend-vi/DECISION_LOG.md
+    - .plans/2026-09-13-redesign-amico-backend-s-web-frontend-vi/sprint-summary.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-13T16:17:20Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-13T16:36:30Z"
+spec_approved_at: "2026-09-13T16:13:12Z"
+spec_approved_by: 'user (chat message, verbatim): ''oke'' -- confirming spec.md for the frontend visual redesign'

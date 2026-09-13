@@ -4,6 +4,12 @@
 session. A browser selects its device by submitting device credentials to
 `POST /login`. Device data is neither cached nor stored in a database.
 
+> This file documents only the routes that exist today. For the full
+> roadmap against the real device's complete sidebar menu (Visitors,
+> Groups management, Time Zones, Reports, Settings, Alarms, etc. --
+> implemented, evidence-backed-but-not-yet-built, or still needing
+> discovery), see `docs/api-roadmap.md`.
+
 ---
 
 ## ⚠️ Security — read this before deploying anywhere but your own machine

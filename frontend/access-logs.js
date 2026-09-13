@@ -2,7 +2,7 @@
 
 (() => {
   const tab = document.getElementById("tab-access-logs");
-  const form = element("form");
+  const form = element("form", undefined, "filter-form");
   const fields = {};
   ["from", "to", "limit"].forEach(key => {
     const label = element("label", key === "limit" ? "Limit" : `${key === "from" ? "From" : "To"} (local time)`);
