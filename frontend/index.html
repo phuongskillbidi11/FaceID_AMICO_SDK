@@ -7,6 +7,8 @@
   <link rel="stylesheet" href="style.css">
   <script defer src="app.js"></script>
   <script defer src="users.js"></script>
+  <script defer src="visitors.js"></script>
+  <script defer src="visits.js"></script>
   <script defer src="access-logs.js"></script>
   <script defer src="system-info.js"></script>
   <script defer src="login.js"></script>
@@ -36,13 +38,35 @@
   </section>
   <div class="app-shell">
     <nav class="sidebar" aria-label="Sections" hidden>
-      <button type="button" data-tab="users" aria-controls="tab-users" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Users</span></button>
-      <button type="button" data-tab="access-logs" aria-controls="tab-access-logs" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Access Logs</span></button>
+      <div class="nav-group">
+        <button type="button" class="nav-group-toggle" id="enroll-toggle" aria-expanded="true" aria-controls="enroll-submenu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M12 20h9"/><path d="M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4Z"/></svg>
+          <span>Enroll</span>
+          <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="nav-submenu" id="enroll-submenu">
+          <button type="button" data-tab="users" aria-controls="tab-users" aria-pressed="true"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="9" cy="7" r="3"/><path d="M3 21v-3a6 6 0 0 1 12 0v3M16 4a3 3 0 0 1 0 6M21 21v-3a6 6 0 0 0-4-5"/></svg><span>Users</span></button>
+          <button type="button" data-tab="visitors" aria-controls="tab-visitors" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="12" cy="8" r="4"/><path d="M4 21v-2a6 6 0 0 1 6-6h4a6 6 0 0 1 6 6v2"/><path d="M9 3.5a3 3 0 0 1 0 5"/></svg><span>Visitors</span></button>
+          <button type="button" data-tab="visits" aria-controls="tab-visits" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="3" y="4" width="18" height="17" rx="2"/><path d="M3 9h18M8 2v4M16 2v4"/></svg><span>Visits</span></button>
+        </div>
+      </div>
+      <div class="nav-group">
+        <button type="button" class="nav-group-toggle" id="reports-toggle" aria-expanded="true" aria-controls="reports-submenu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
+          <span>Reports</span>
+          <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="nav-submenu" id="reports-submenu">
+          <button type="button" data-tab="access-logs" aria-controls="tab-access-logs" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Access (Global)</span></button>
+        </div>
+      </div>
       <button type="button" data-tab="system-info" aria-controls="tab-system-info" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>System Information</span></button>
     </nav>
     <main id="device-content" hidden>
       <div id="tab-users" hidden><h2>Users</h2></div>
-      <div id="tab-access-logs" hidden><h2>Access Logs</h2></div>
+      <div id="tab-visitors" hidden><h2>Visitors</h2></div>
+      <div id="tab-visits" hidden><h2>Visits</h2></div>
+      <div id="tab-access-logs" hidden><p class="breadcrumb">Reports › Access (Global)</p><h2>Access (Global)</h2></div>
       <div id="tab-system-info" hidden><h2>System Information</h2></div>
     </main>
   </div>

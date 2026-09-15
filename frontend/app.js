@@ -56,6 +56,21 @@ function element(tag, text, className) {
   return node;
 }
 
+// Only constant, locally authored paths enter SVG markup; user data stays textContent.
+const booleanPaths = { yes: '<path d="m4 12 5 5L20 6"/>', no: '<path d="m6 6 12 12M18 6 6 18"/>' };
+// value: true (green check) | false (red X) | null (grey X, e.g. "not recognized" --
+// a real third state on the real device's own Access Logs report, not just yes/no).
+function booleanIcon(value, yesLabel, noLabel, neutralLabel) {
+  const cls = value === true ? "icon-yes" : value === false ? "icon-no" : "icon-neutral";
+  const label = value === true ? yesLabel : value === false ? noLabel : (neutralLabel ?? noLabel);
+  const path = value === true ? booleanPaths.yes : booleanPaths.no;
+  const icon = element("span", undefined, cls);
+  icon.setAttribute("role", "img");
+  icon.setAttribute("aria-label", label);
+  icon.innerHTML = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true" focusable="false">${path}</svg>`;
+  return icon;
+}
+
 function formatTime(value) {
   if (!value) return "—";
   const date = new Date(Number(value) * 1000);
@@ -79,8 +94,19 @@ function activateTab(name) {
   if (location.protocol !== "file:") document.dispatchEvent(new CustomEvent("tab-activated", { detail: name }));
 }
 
+function setNavGroupExpanded(toggle, expanded) {
+  const submenu = document.getElementById(toggle.getAttribute("aria-controls"));
+  toggle.setAttribute("aria-expanded", String(expanded));
+  submenu.hidden = !expanded;
+}
+
 document.getElementById("dismiss-error").addEventListener("click", hideError);
 document.querySelectorAll("nav [data-tab]").forEach(button => {
   button.addEventListener("click", () => activateTab(button.dataset.tab));
+});
+document.querySelectorAll(".nav-group-toggle").forEach(toggle => {
+  toggle.addEventListener("click", () => {
+    setNavGroupExpanded(toggle, toggle.getAttribute("aria-expanded") !== "true");
+  });
 });
 

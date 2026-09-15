@@ -30,33 +30,138 @@ namespace amico::detail {
 
 /// GET-listing body for the Users page's confirmed default filter
 /// (`user_type_id = 0 OR user_type_id IS NULL`), ordered by name.
-nlohmann::json buildUsersListBody(int limit, int offset);
+/// `userTypeId` unset (default) preserves this exact filter; set,
+/// it switches to a single `user_types.id = *userTypeId` clause
+/// instead (Visitors plan, 2026-09-14, LIVE-CONFIRMED shape).
+nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId = std::nullopt);
 
 /// Single-user lookup by id (LIVE_CONFIRMED shape: a single `where`
 /// clause needs no `connector`).
 nlohmann::json buildUserGetBody(int64_t id);
 
-/// Access-logs listing, newest first. `to` (if set) becomes the one
-/// server-side `where` clause (`time <= to`); there is no way to add a
-/// second server-side clause through this function -- see the access-log
-/// range-filtering design decision (from is applied client-side by the
-/// caller, not here).
-nlohmann::json buildAccessLogsListBody(std::optional<int64_t> to, int limit, int offset);
+/// Access-logs listing, newest first. Both `from` and `to` are applied
+/// server-side as inclusive time bounds. Chained `where` array clauses
+/// use implicit AND (LIVE_CONFIRMED 2026-09-14, spec.md Decision 5).
+nlohmann::json buildAccessLogsListBody(std::optional<int64_t> from, std::optional<int64_t> to,
+                                       int limit, int offset, const std::optional<std::vector<int64_t>>& userIds = std::nullopt, const std::optional<std::vector<int64_t>>& groupIds = std::nullopt, const std::optional<std::vector<int64_t>>& timeZoneIds = std::nullopt);
+
+/// Access-log count with the same inclusive server-side bounds as listing.
+nlohmann::json buildAccessLogsCountBody(std::optional<int64_t> from, std::optional<int64_t> to, const std::optional<std::vector<int64_t>>& userIds = std::nullopt, const std::optional<std::vector<int64_t>>& groupIds = std::nullopt, const std::optional<std::vector<int64_t>>& timeZoneIds = std::nullopt);
+
+/// Minimal, unpaginated portal/time-zone name lookups (LIVE_CONFIRMED 2026-09-14).
+nlohmann::json buildPortalsListBody();
+
+/// Full name-only groups list for report filters.
+nlohmann::json buildGroupsListBody();
+nlohmann::json buildTimeZonesListBody();
+
+/// Batch user name/registration lookup using the confirmed users.id array filter.
+nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
+
+/// Access-log -> access-rule join, batched by access_log_id (first hop of
+/// the 2-hop time-zone join -- LIVE-CAPTURED schema, spec.md Decision 2b:
+/// `access_logs` has no direct `time_zone_id`).
+nlohmann::json buildAccessLogAccessRulesBody(const std::vector<int64_t>& accessLogIds);
+
+/// Access-rule -> time-zone join, batched by access_rule_id (second hop of
+/// the same join).
+nlohmann::json buildAccessRuleTimeZonesBody(const std::vector<int64_t>& accessRuleIds);
+
+/// Reads the `c_users` row (if any) for a given user id -- id, cpf
+/// (Visitors plan, 2026-09-14; LIVE-CONFIRMED field set via
+/// `object_metadata.fcgi` and direct `window['c_users']` class
+/// introspection).
+nlohmann::json buildCUsersGetBody(int64_t userId);
+/// Creates a `c_users` row linking userId to a CPF value.
+nlohmann::json buildCUsersCreateBody(int64_t userId, const std::string& cpf);
+/// Updates an existing `c_users` row's cpf value by its own row id.
+nlohmann::json buildCUsersUpdateBody(int64_t cUsersRowId, const std::string& cpf);
+/// Defensive cleanup: destroys any `c_users` row for a given user id.
+/// Whether the device cascades this on its own is unconfirmed -- this
+/// mirrors the existing `buildFaceTemplatesDeleteBody` precedent of
+/// not assuming cascade delete without evidence.
+nlohmann::json buildCUsersDeleteBody(int64_t userId);
+
+/// GET-listing body for `visits`, matching the real device's own
+/// default filter (`finished != 1`) -- LIVE_CONFIRMED shape via
+/// class.js's own `defaultWhere`
+/// (.plans/2026-09-14-implement-visits-enroll-visits-crud/spec.md
+/// Background).
+nlohmann::json buildVisitsListBody(int limit, int offset);
+
+/// Single-visit lookup by id -- no `finished` filter (a specific known
+/// id, regardless of state), same pattern as buildUserGetBody.
+nlohmann::json buildVisitGetBody(int64_t id);
+
+/// Single-visit creation body for `create_objects.fcgi`.
+/// LIVE_CONFIRMED wire shape 2026-09-14 via XHR-interceptor capture
+/// (spec.md Background): `join:"LEFT"`, `fields` lists all 6 columns,
+/// `where:[]`, `order:["id"]`, one-element `values` array with
+/// visitor_id/host_id/begin_time/end_time/finished:0. Unlike
+/// `buildUserCreateBody`, this real capture DOES include
+/// join/fields/where/order alongside `values` -- kept verbatim rather
+/// than "cleaned up" to match `buildUserCreateBody`'s leaner shape,
+/// since this is what was actually observed on the wire for this
+/// specific object.
+nlohmann::json buildVisitCreateBody(int64_t visitorId, int64_t hostId,
+                                     int64_t beginTime, int64_t endTime);
+
+/// Single-visit partial-update body for `modify_objects.fcgi`. Unset
+/// values are omitted. NOT live-captured this session (spec.md Risks)
+/// -- built by symmetry with buildUserUpdateBody's confirmed
+/// bare-object `values` + scalar `where.id` shape. Never includes
+/// `finished` (see VisitUpdate's own doc comment).
+nlohmann::json buildVisitUpdateBody(int64_t id,
+                                     std::optional<int64_t> visitorId = std::nullopt,
+                                     std::optional<int64_t> hostId = std::nullopt,
+                                     std::optional<int64_t> beginTime = std::nullopt,
+                                     std::optional<int64_t> endTime = std::nullopt);
+
+/// Single-visit deletion body for `destroy_objects.fcgi`. Does NOT
+/// touch the visitor's cards (spec.md Risks -- only finish() does
+/// that, matching confirmed device behavior).
+nlohmann::json buildVisitDeleteBody(int64_t id);
+
+/// Sets a visit's `finished`/`end_time` fields directly (internal use
+/// only, by VisitsApi::finish() -- never exposed via VisitUpdate).
+/// LIVE_CONFIRMED shape via class.js's own finished-branch save()
+/// (spec.md Background): `values: {"finished": 1, "end_time": <now>}`.
+nlohmann::json buildVisitFinishBody(int64_t id, int64_t endTime);
+
+/// Revokes every card currently issued to a given user id. LIVE_
+/// CONFIRMED literal shape via class.js's own finish-branch
+/// destroy_objects call (spec.md Background):
+/// `{object:"cards", where:{cards:{user_id:{"==":userId}}}}`. Used by
+/// VisitsApi::finish() to revoke the visitor's cards; deliberately a
+/// distinct builder from the existing single-card
+/// buildCardRemoveBody(cardId) (removes ALL of one user's cards, not
+/// one card by its own id).
+nlohmann::json buildUserCardsDeleteBody(int64_t userId);
 
 /// Single-user creation body for `create_objects.fcgi` (JS_CONFIRMED,
 /// wire-verified live 2026-09-12). `values` is always a one-element
 /// array -- the server rejects a bare object with HTTP 400
 /// (`create_objects` supports bulk-create of multiple objects; this SDK
-/// only ever creates one at a time). Only name and registration are
-/// writable; strings are field values, never object/field/connector
-/// names. No password/salt fields are accepted.
-nlohmann::json buildUserCreateBody(const std::string& name, const std::string& registration);
+/// only ever creates one at a time). Strings are field values, never
+/// object/field/connector names. No password/salt fields are accepted.
+/// `userTypeId` unset (default) omits `user_type_id` from `values`
+/// entirely -- byte-for-byte the same body regular User creation has
+/// always sent. Set, it adds `"user_type_id": *userTypeId` to the
+/// same values object (Visitors plan, 2026-09-14, LIVE-CONFIRMED via
+/// direct browser class introspection of the device's own save()
+/// mechanism -- see spec.md's Background section).
+nlohmann::json buildUserCreateBody(const std::string& name, const std::string& registration,
+                                    std::optional<int64_t> userTypeId = std::nullopt);
 
 /// Single-user partial-update body for `modify_objects.fcgi` (JS_CONFIRMED).
 /// Unset values are omitted; an explicitly empty string is sent unchanged.
-/// The id filter is a scalar and has no connector.
+/// The id filter is a scalar and has no connector. `beginTime`/`endTime`
+/// (unix epoch seconds) LIVE-CONFIRMED 2026-09-14 via the real device's
+/// own "Default Users" edit form -- see `UserUpdate`'s own doc comment.
 nlohmann::json buildUserUpdateBody(int64_t id, const std::optional<std::string>& name,
-                                  const std::optional<std::string>& registration);
+                                  const std::optional<std::string>& registration,
+                                  std::optional<int64_t> beginTime = std::nullopt,
+                                  std::optional<int64_t> endTime = std::nullopt);
 
 /// Single-user deletion body for `destroy_objects.fcgi` (JS_CONFIRMED).
 /// The id filter is always a one-element array; no bulk-delete surface.
@@ -170,5 +275,6 @@ extern const std::vector<std::string> kUserWritableFields;
 extern const std::vector<std::string> kUserGroupWritableFields;
 extern const std::vector<std::string> kCardWritableFields;
 extern const std::vector<std::string> kUserRoleWritableFields;
+extern const std::vector<std::string> kVisitFields;
 
 }  // namespace amico::detail

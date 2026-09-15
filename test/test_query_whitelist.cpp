@@ -1,5 +1,7 @@
 #include <doctest/doctest.h>
 
+#include <algorithm>
+
 #include <nlohmann/json.hpp>
 
 #include "ObjectQuery.hpp"
@@ -13,7 +15,7 @@ TEST_CASE("scenario 18: builders always target a fixed, hardcoded object -- neve
     nlohmann::json getBody = detail::buildUserGetBody(1);
     CHECK(getBody["object"] == "users");
 
-    nlohmann::json logsBody = detail::buildAccessLogsListBody(std::nullopt, 10, 0);
+    nlohmann::json logsBody = detail::buildAccessLogsListBody(std::nullopt, std::nullopt, 10, 0);
     CHECK(logsBody["object"] == "access_logs");
 
     // There is no overload of any of these three functions that accepts
@@ -32,7 +34,7 @@ TEST_CASE("every read builder always emits a non-empty 'fields' array (Decision 
     REQUIRE(getBody.contains("fields"));
     CHECK_FALSE(getBody["fields"].empty());
 
-    nlohmann::json logsBody = detail::buildAccessLogsListBody(1700000000, 10, 0);
+    nlohmann::json logsBody = detail::buildAccessLogsListBody(std::nullopt, 1700000000, 10, 0);
     REQUIRE(logsBody.contains("fields"));
     CHECK_FALSE(logsBody["fields"].empty());
 }
@@ -108,7 +110,7 @@ TEST_CASE("scenario 19: no builder accepts a caller-supplied where.connector str
     REQUIRE(getBody["where"].size() == 1);
     CHECK(getBody["where"][0].contains("connector") == false);
 
-    nlohmann::json logsBody = detail::buildAccessLogsListBody(1700000000, 10, 0);
+    nlohmann::json logsBody = detail::buildAccessLogsListBody(std::nullopt, 1700000000, 10, 0);
     REQUIRE(logsBody["where"].size() == 1);
     CHECK(logsBody["where"][0].contains("connector") == false);
 }
@@ -190,6 +192,87 @@ TEST_CASE("hasPassword/groupIds/count read builders never request the salt field
     CHECK(detail::buildBioCountBody(1)["fields"] == nlohmann::json::array({"COUNT(*)"}));
 }
 
+TEST_CASE("Q-1: kAccessLogFields includes identifier_id") {
+    CHECK(std::find(detail::kAccessLogFields.begin(), detail::kAccessLogFields.end(), "identifier_id") !=
+          detail::kAccessLogFields.end());
+}
+
+TEST_CASE("Q-2: chained from+to where-clause shape checks values, not just length") {
+    nlohmann::json logsBody = detail::buildAccessLogsListBody(1700000000, 1700005000, 10, 0);
+    REQUIRE(logsBody["where"].size() == 2);
+    CHECK(logsBody["where"][0]["field"] == "time");
+    CHECK(logsBody["where"][0]["operator"] == ">=");
+    CHECK(logsBody["where"][0]["value"] == 1700000000);
+    CHECK(logsBody["where"][0].contains("connector") == false);
+    CHECK(logsBody["where"][1]["field"] == "time");
+    CHECK(logsBody["where"][1]["operator"] == "<=");
+    CHECK(logsBody["where"][1]["value"] == 1700005000);
+    CHECK(logsBody["where"][1].contains("connector") == false);
+}
+
+TEST_CASE("Q-3: from-only and to-only cases still produce a single correctly-shaped clause") {
+    nlohmann::json fromOnly = detail::buildAccessLogsListBody(1700000000, std::nullopt, 10, 0);
+    REQUIRE(fromOnly["where"].size() == 1);
+    CHECK(fromOnly["where"][0]["field"] == "time");
+    CHECK(fromOnly["where"][0]["operator"] == ">=");
+    CHECK(fromOnly["where"][0]["value"] == 1700000000);
+
+    nlohmann::json toOnly = detail::buildAccessLogsListBody(std::nullopt, 1700000000, 10, 0);
+    REQUIRE(toOnly["where"].size() == 1);
+    CHECK(toOnly["where"][0]["field"] == "time");
+    CHECK(toOnly["where"][0]["operator"] == "<=");
+    CHECK(toOnly["where"][0]["value"] == 1700000000);
+}
+
+TEST_CASE("Q-4: buildAccessLogsCountBody mirrors the list query's where clause") {
+    nlohmann::json countBody = detail::buildAccessLogsCountBody(1700000000, 1700005000);
+    CHECK(countBody["object"] == "access_logs");
+    CHECK(countBody["fields"] == nlohmann::json::array({"COUNT(*)"}));
+    CHECK_FALSE(countBody.contains("order"));
+    CHECK_FALSE(countBody.contains("limit"));
+    CHECK_FALSE(countBody.contains("offset"));
+    CHECK_FALSE(countBody.contains("finish"));
+
+    nlohmann::json listBody = detail::buildAccessLogsListBody(1700000000, 1700005000, 10, 0);
+    CHECK(countBody["where"] == listBody["where"]);
+}
+
+TEST_CASE("Q-5: buildPortalsListBody / buildTimeZonesListBody request only id and name, unbounded") {
+    nlohmann::json portalsBody = detail::buildPortalsListBody();
+    CHECK(portalsBody["object"] == "portals");
+    CHECK(portalsBody["fields"] == nlohmann::json::array({"id", "name"}));
+    CHECK_FALSE(portalsBody.contains("where"));
+    CHECK_FALSE(portalsBody.contains("limit"));
+
+    nlohmann::json timeZonesBody = detail::buildTimeZonesListBody();
+    CHECK(timeZonesBody["object"] == "time_zones");
+    CHECK(timeZonesBody["fields"] == nlohmann::json::array({"id", "name"}));
+    CHECK_FALSE(timeZonesBody.contains("where"));
+    CHECK_FALSE(timeZonesBody.contains("limit"));
+}
+
+TEST_CASE("Q-6: buildUsersByIdsBody uses the confirmed array-of-ids where shape") {
+    nlohmann::json body = detail::buildUsersByIdsBody({36, 5});
+    CHECK(body["object"] == "users");
+    CHECK(body["fields"] == nlohmann::json::array({"id", "name", "registration"}));
+    nlohmann::json expectedWhere = {{"users", {{"id", nlohmann::json::array({36, 5})}}}};
+    CHECK(body["where"] == expectedWhere);
+}
+
+TEST_CASE("Q-7: buildAccessLogAccessRulesBody / buildAccessRuleTimeZonesBody use the confirmed array-of-ids where shape") {
+    nlohmann::json rulesBody = detail::buildAccessLogAccessRulesBody({220, 219});
+    CHECK(rulesBody["object"] == "access_log_access_rules");
+    CHECK(rulesBody["fields"] == nlohmann::json::array({"access_log_id", "access_rule_id"}));
+    nlohmann::json expectedRulesWhere = {{"access_log_access_rules", {{"access_log_id", nlohmann::json::array({220, 219})}}}};
+    CHECK(rulesBody["where"] == expectedRulesWhere);
+
+    nlohmann::json zonesBody = detail::buildAccessRuleTimeZonesBody({1});
+    CHECK(zonesBody["object"] == "access_rule_time_zones");
+    CHECK(zonesBody["fields"] == nlohmann::json::array({"access_rule_id", "time_zone_id"}));
+    nlohmann::json expectedZonesWhere = {{"access_rule_time_zones", {{"access_rule_id", nlohmann::json::array({1})}}}};
+    CHECK(zonesBody["where"] == expectedZonesWhere);
+}
+
 TEST_CASE("no new Group 1 builder accepts a caller-supplied object/field/connector string") {
     // buildGroupAddBody/buildGroupRemoveBody/buildCardAddBody/
     // buildCardRemoveBody/buildAdministratorSetBody/buildPasswordSetBody/
@@ -200,4 +283,43 @@ TEST_CASE("no new Group 1 builder accepts a caller-supplied object/field/connect
     // connector name. This is a compile-time fact verified by their
     // signatures; no runtime assertion is meaningful here (same pattern
     // as "scenario 18" above).
+}
+
+TEST_CASE("Q-8 (Visitors plan, 2026-09-14): no new builder accepts a caller-supplied object/field/connector string") {
+    // buildUsersListBody's new userTypeId parameter and
+    // buildUserCreateBody's new userTypeId parameter are both
+    // std::optional<int64_t> -- a VALUE, never a field/object/connector
+    // name. buildCUsersGetBody/CreateBody/UpdateBody/DeleteBody
+    // (ObjectQuery.hpp) all take only int64_t/std::string VALUE
+    // parameters the same way. This is a compile-time fact verified by
+    // their signatures; no runtime assertion is meaningful here (same
+    // pattern as "scenario 18"/the test case immediately above).
+}
+
+TEST_CASE("Q-9 (Visits plan, 2026-09-14): no new visits builder accepts a caller-supplied object/field/connector string") {
+    // buildVisitsListBody/GetBody/CreateBody/UpdateBody/DeleteBody/
+    // FinishBody and buildUserCardsDeleteBody (ObjectQuery.hpp) all take
+    // only int64_t VALUE parameters -- never a field/object/connector
+    // name. This is a compile-time fact verified by their signatures;
+    // no runtime assertion is meaningful here (same pattern as
+    // "scenario 18"/Q-8 above).
+}
+
+TEST_CASE("Q-10: visits query builders always target the hardcoded visits/cards objects") {
+    CHECK(detail::buildVisitsListBody(10, 0)["object"] == "visits");
+    CHECK(detail::buildVisitGetBody(1)["object"] == "visits");
+    CHECK(detail::buildVisitCreateBody(1, 2, 100, 200)["object"] == "visits");
+    CHECK(detail::buildVisitUpdateBody(1)["object"] == "visits");
+    CHECK(detail::buildVisitDeleteBody(1)["object"] == "visits");
+    CHECK(detail::buildVisitFinishBody(1, 100)["object"] == "visits");
+    CHECK(detail::buildUserCardsDeleteBody(1)["object"] == "cards");
+}
+
+TEST_CASE("Q-11: kVisitFields never includes password/salt/panic_password/panic_salt") {
+    for (const auto& field : detail::kVisitFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
 }

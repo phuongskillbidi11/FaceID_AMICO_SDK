@@ -1,0 +1,16 @@
+{"type":"triaged","at":"2026-09-13T19:28:33Z","detail":"feature"}
+{"type":"spec_approved","at":"2026-09-13T19:32:10Z"}
+{"type":"spec_approved","at":"2026-09-13T19:32:10Z"}
+{"type":"state_changed","at":"2026-09-13T19:32:10Z","detail":"NEEDS_SPEC_APPROVAL"}
+{"type":"state_changed","at":"2026-09-13T19:32:11Z","detail":"SPEC_APPROVED"}
+{"type":"state_changed","at":"2026-09-13T19:34:39Z","detail":"PLANNED"}
+{"type":"reviewed","at":"2026-09-13T19:37:15Z","detail":"REJECT"}
+{"type":"state_changed","at":"2026-09-13T19:37:23Z","detail":"NEEDS_REPLAN"}
+{"type":"state_changed","at":"2026-09-13T19:38:18Z","detail":"PLANNED"}
+{"type":"reviewed","at":"2026-09-13T19:38:18Z","detail":"PASS"}
+{"type":"state_changed","at":"2026-09-13T19:38:18Z","detail":"REVIEWED"}
+{"type":"state_changed","at":"2026-09-13T19:38:26Z","detail":"APPROVED"}
+{"adapter":"codex","at":"2026-09-13T19:38:46Z","capability":"codex.execute","reason":"role not active for this plan — no activation on record for executor (run `eng adapter prompt executor \u003cplan-dir\u003e` first)","result":"DENIED","role":"executor","type":"tool_invocation"}
+{"at":"2026-09-13T19:38:55Z","context_manifest":"context-manifest-executor.yaml","role":"executor","state":"APPROVED","type":"role_activated"}
+{"type":"verified","at":"2026-09-13T20:21:02Z","detail":"FAIL"}
+{"type":"verified","at":"2026-09-13T20:21:16Z","detail":"FAIL"}

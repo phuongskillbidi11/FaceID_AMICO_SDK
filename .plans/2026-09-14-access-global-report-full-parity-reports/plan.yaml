@@ -1,0 +1,39 @@
+plan: 2026-09-14-access-global-report-full-parity-reports
+risk_level: feature
+planned_at:
+    git_sha: f23af39bc29dcfc1000a3afe3dd6c315f3dd3df4
+state: APPROVED
+write_scope:
+    - include/amico/Types.hpp
+    - include/amico/Client.hpp
+    - src/Client.cpp
+    - src/ObjectQuery.hpp
+    - src/ObjectQuery.cpp
+    - backend/JsonMapping.hpp
+    - backend/JsonMapping.cpp
+    - backend/Routes.cpp
+    - frontend/index.html
+    - frontend/access-logs.js
+    - frontend/style.css
+    - test/test_access_logs.cpp
+    - test/backend/test_routes.cpp
+    - docs/backend-api.md
+    - .plans/2026-09-14-access-global-report-full-parity-reports/DECISION_LOG.md
+    - .plans/2026-09-14-access-global-report-full-parity-reports/sprint-summary.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-14T02:40:32Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-14T03:54:14Z"
+spec_approved_at: "2026-09-14T02:37:33Z"
+spec_approved_by: Claude

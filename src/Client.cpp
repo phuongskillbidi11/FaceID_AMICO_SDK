@@ -3,10 +3,12 @@
 #include <algorithm>
 #include <cctype>
 #include <ctime>
+#include <map>
 #include <sstream>
 
 #include <nlohmann/json.hpp>
 
+#include "AccessLogLabels.hpp"
 #include "ObjectQuery.hpp"
 #include "Session.hpp"
 #include "UrlValidation.hpp"
@@ -303,7 +305,7 @@ struct AmicoClient::Impl {
 
     std::vector<AmicoUser> listUsers(const UserQuery& query) {
         const int limit = resolveLimit(query.limit);
-        nlohmann::json body = detail::buildUsersListBody(limit, query.offset);
+        nlohmann::json body = detail::buildUsersListBody(limit, query.offset, query.userTypeId);
         nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
 
         auto usersIt = response.find("users");
@@ -333,28 +335,83 @@ struct AmicoClient::Impl {
         return mapUser(usersIt->front());
     }
 
+    /// Batch name/registration lookup, deliberately lighter than
+    /// getUser()/mapUser() -- no groupIds/cardCount/faceCount/etc.
+    /// enrichment, which the access-logs join has no use for.
+    std::map<int64_t, std::pair<std::string, std::string>> getUserNamesByIds(const std::vector<int64_t>& ids) {
+        std::map<int64_t, std::pair<std::string, std::string>> result;
+        if (ids.empty()) {
+            return result;
+        }
+        nlohmann::json body = detail::buildUsersByIdsBody(ids);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto usersIt = response.find("users");
+        if (usersIt == response.end() || !usersIt->is_array()) {
+            throw ProtocolError("missing required field 'users' in response from /load_objects.fcgi");
+        }
+        for (const auto& row : *usersIt) {
+            int64_t id = requireField<int64_t>(row, "id", "/load_objects.fcgi (users)");
+            std::string name = requireField<std::string>(row, "name", "/load_objects.fcgi (users)");
+            std::string registration = requireField<std::string>(row, "registration", "/load_objects.fcgi (users)");
+            result[id] = {std::move(name), std::move(registration)};
+        }
+        return result;
+    }
+
+    /// Returns the c_users row id for a given user, if one exists
+    /// (Visitors plan, 2026-09-14).
+    std::optional<int64_t> getCUsersRowId(int64_t userId) {
+        nlohmann::json body = detail::buildCUsersGetBody(userId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("c_users");
+        if (it == response.end() || !it->is_array() || it->empty()) {
+            return std::nullopt;
+        }
+        return requireField<int64_t>(it->front(), "id", "/load_objects.fcgi (c_users)");
+    }
+
     int64_t createUser(const NewUser& user) {
-        nlohmann::json body = detail::buildUserCreateBody(user.name, user.registration);
+        nlohmann::json body = detail::buildUserCreateBody(user.name, user.registration, user.userTypeId);
         nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
 
         nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
         if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
             throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
         }
-        return ids.front().get<int64_t>();
+        int64_t newId = ids.front().get<int64_t>();
+        if (user.cpf.has_value()) {
+            postAuthenticatedJson("/create_objects.fcgi", detail::buildCUsersCreateBody(newId, *user.cpf));
+        }
+        return newId;
     }
 
     void updateUser(const UserUpdate& user) {
-        nlohmann::json body = detail::buildUserUpdateBody(user.id, user.name, user.registration);
+        nlohmann::json body = detail::buildUserUpdateBody(user.id, user.name, user.registration,
+                                                           user.beginTime, user.endTime);
         nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
 
         nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
         if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
             throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
         }
+
+        if (user.cpf.has_value()) {
+            std::optional<int64_t> cUsersRowId = getCUsersRowId(user.id);
+            if (cUsersRowId.has_value()) {
+                postAuthenticatedJson("/modify_objects.fcgi", detail::buildCUsersUpdateBody(*cUsersRowId, *user.cpf));
+            } else {
+                postAuthenticatedJson("/create_objects.fcgi", detail::buildCUsersCreateBody(user.id, *user.cpf));
+            }
+        }
     }
 
     void removeUser(int64_t id) {
+        // Defensive cleanup -- whether the device cascades this on its
+        // own is unconfirmed; no throw-on-zero-changes, same reasoning
+        // as the existing removeUserImage precedent (a user may have
+        // no c_users row at all and this is still a legitimate no-op).
+        postAuthenticatedJson("/destroy_objects.fcgi", detail::buildCUsersDeleteBody(id));
+
         nlohmann::json body = detail::buildUserDeleteBody(id);
         nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
 
@@ -441,7 +498,21 @@ struct AmicoClient::Impl {
         user.bioCount = runCountQuery(detail::buildBioCountBody(user.id), "templates");
         user.hasPassword = getUserHasPassword(user.id);
         user.imageUrl = "/user_get_image.fcgi?user_id=" + std::to_string(user.id);
+        user.cpf = getUserCpf(user.id);
         return user;
+    }
+
+    /// Returns the CPF value for a user, if a c_users row exists
+    /// (Visitors plan, 2026-09-14) -- std::nullopt, never an
+    /// empty-string sentinel, when no row exists.
+    std::optional<std::string> getUserCpf(int64_t userId) {
+        nlohmann::json body = detail::buildCUsersGetBody(userId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("c_users");
+        if (it == response.end() || !it->is_array() || it->empty()) {
+            return std::nullopt;
+        }
+        return requireField<std::string>(it->front(), "cpf", "/load_objects.fcgi (c_users)");
     }
 
     void addUserToGroup(int64_t userId, int64_t groupId) {
@@ -563,7 +634,7 @@ struct AmicoClient::Impl {
 
     std::vector<AccessLogEntry> listAccessLogs(const AccessLogQuery& query) {
         const int limit = resolveLimit(query.limit);
-        nlohmann::json body = detail::buildAccessLogsListBody(query.to, limit, 0);
+        nlohmann::json body = detail::buildAccessLogsListBody(query.from, query.to, limit, query.offset, query.userIds, query.groupIds, query.timeZoneIds);
         nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
 
         auto logsIt = response.find("access_logs");
@@ -579,17 +650,280 @@ struct AmicoClient::Impl {
             entry.time = requireField<int64_t>(row, "time", "/load_objects.fcgi (access_logs)");
             entry.logTypeId = requireField<int64_t>(row, "log_type_id", "/load_objects.fcgi (access_logs)");
             entry.event = requireField<int64_t>(row, "event", "/load_objects.fcgi (access_logs)");
+            entry.identifierId = requireField<int64_t>(row, "identifier_id", "/load_objects.fcgi (access_logs)");
             if (row.contains("user_id") && !row["user_id"].is_null()) {
                 entry.userId = row["user_id"].get<int64_t>();
             }
             if (row.contains("portal_id") && !row["portal_id"].is_null()) {
                 entry.portalId = row["portal_id"].get<int64_t>();
             }
-            if (!query.from.has_value() || entry.time >= *query.from) {
-                result.push_back(std::move(entry));
-            }
+            result.push_back(std::move(entry));
         }
         return result;
+    }
+
+    int64_t accessLogsCount(const AccessLogQuery& query) {
+        return runCountQuery(detail::buildAccessLogsCountBody(query.from, query.to, query.userIds, query.groupIds, query.timeZoneIds), "access_logs");
+    }
+
+    std::vector<Portal> listPortals() {
+        nlohmann::json body = detail::buildPortalsListBody();
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto portalsIt = response.find("portals");
+        if (portalsIt == response.end() || !portalsIt->is_array()) {
+            throw ProtocolError("missing required field 'portals' in response from /load_objects.fcgi");
+        }
+        std::vector<Portal> result;
+        result.reserve(portalsIt->size());
+        for (const auto& row : *portalsIt) {
+            Portal portal;
+            portal.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (portals)");
+            portal.name = requireField<std::string>(row, "name", "/load_objects.fcgi (portals)");
+            result.push_back(std::move(portal));
+        }
+        return result;
+    }
+
+    std::vector<Group> listGroups() {
+        nlohmann::json body = detail::buildGroupsListBody();
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto groupsIt = response.find("groups");
+        if (groupsIt == response.end() || !groupsIt->is_array()) {
+            throw ProtocolError("missing required field 'groups' in response from /load_objects.fcgi");
+        }
+        std::vector<Group> result;
+        result.reserve(groupsIt->size());
+        for (const auto& row : *groupsIt) {
+            Group group;
+            group.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (groups)");
+            group.name = requireField<std::string>(row, "name", "/load_objects.fcgi (groups)");
+            result.push_back(std::move(group));
+        }
+        return result;
+    }
+
+    std::vector<TimeZone> listTimeZones() {
+        nlohmann::json body = detail::buildTimeZonesListBody();
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto timeZonesIt = response.find("time_zones");
+        if (timeZonesIt == response.end() || !timeZonesIt->is_array()) {
+            throw ProtocolError("missing required field 'time_zones' in response from /load_objects.fcgi");
+        }
+        std::vector<TimeZone> result;
+        result.reserve(timeZonesIt->size());
+        for (const auto& row : *timeZonesIt) {
+            TimeZone timeZone;
+            timeZone.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (time_zones)");
+            timeZone.name = requireField<std::string>(row, "name", "/load_objects.fcgi (time_zones)");
+            result.push_back(std::move(timeZone));
+        }
+        return result;
+    }
+
+    /// Resolves the 2-hop time-zone join for a batch of access_log ids
+    /// (spec.md Decision 2b). Tie-break: the first row encountered at
+    /// each hop wins -- deterministic, not arbitrary; matches every row
+    /// observed live on this device (1:1 at both hops today).
+    std::map<int64_t, std::string> timeZoneNamesForAccessLogIds(const std::vector<int64_t>& accessLogIds) {
+        std::map<int64_t, std::string> result;
+        if (accessLogIds.empty()) {
+            return result;
+        }
+
+        nlohmann::json rulesBody = detail::buildAccessLogAccessRulesBody(accessLogIds);
+        nlohmann::json rulesResponse = postAuthenticatedJson("/load_objects.fcgi", rulesBody);
+        auto rulesIt = rulesResponse.find("access_log_access_rules");
+        if (rulesIt == rulesResponse.end() || !rulesIt->is_array()) {
+            throw ProtocolError(
+                "missing required field 'access_log_access_rules' in response from /load_objects.fcgi");
+        }
+        std::map<int64_t, int64_t> accessLogToRule;
+        for (const auto& row : *rulesIt) {
+            int64_t accessLogId = requireField<int64_t>(row, "access_log_id",
+                                                          "/load_objects.fcgi (access_log_access_rules)");
+            int64_t accessRuleId = requireField<int64_t>(row, "access_rule_id",
+                                                           "/load_objects.fcgi (access_log_access_rules)");
+            accessLogToRule.emplace(accessLogId, accessRuleId);  // emplace: first row wins
+        }
+        if (accessLogToRule.empty()) {
+            return result;
+        }
+
+        std::vector<int64_t> ruleIds;
+        ruleIds.reserve(accessLogToRule.size());
+        for (const auto& [accessLogId, ruleId] : accessLogToRule) {
+            ruleIds.push_back(ruleId);
+        }
+
+        nlohmann::json zonesBody = detail::buildAccessRuleTimeZonesBody(ruleIds);
+        nlohmann::json zonesResponse = postAuthenticatedJson("/load_objects.fcgi", zonesBody);
+        auto zonesIt = zonesResponse.find("access_rule_time_zones");
+        if (zonesIt == zonesResponse.end() || !zonesIt->is_array()) {
+            throw ProtocolError(
+                "missing required field 'access_rule_time_zones' in response from /load_objects.fcgi");
+        }
+        std::map<int64_t, int64_t> ruleToTimeZone;
+        for (const auto& row : *zonesIt) {
+            int64_t accessRuleId = requireField<int64_t>(row, "access_rule_id",
+                                                           "/load_objects.fcgi (access_rule_time_zones)");
+            int64_t timeZoneId = requireField<int64_t>(row, "time_zone_id",
+                                                         "/load_objects.fcgi (access_rule_time_zones)");
+            ruleToTimeZone.emplace(accessRuleId, timeZoneId);  // emplace: first row wins
+        }
+        if (ruleToTimeZone.empty()) {
+            return result;
+        }
+
+        std::map<int64_t, std::string> timeZoneIdToName;
+        for (const auto& timeZone : listTimeZones()) {
+            timeZoneIdToName[timeZone.id] = timeZone.name;
+        }
+
+        for (const auto& [accessLogId, ruleId] : accessLogToRule) {
+            auto zoneIdIt = ruleToTimeZone.find(ruleId);
+            if (zoneIdIt == ruleToTimeZone.end()) {
+                continue;
+            }
+            auto nameIt = timeZoneIdToName.find(zoneIdIt->second);
+            if (nameIt == timeZoneIdToName.end()) {
+                continue;
+            }
+            result[accessLogId] = nameIt->second;
+        }
+        return result;
+    }
+
+    /// Reads finished as either a JSON boolean or a 0/1 integer -- the
+    /// device's own create_objects.fcgi capture sent finished:0 as a
+    /// plain integer (spec.md Background), and load_objects.fcgi is not
+    /// separately confirmed to echo it back as a JSON boolean.
+    Visit mapVisit(const nlohmann::json& row,
+                   const std::map<int64_t, std::pair<std::string, std::string>>& namesById) {
+        Visit visit;
+        visit.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (visits)");
+        visit.visitorId = requireField<int64_t>(row, "visitor_id", "/load_objects.fcgi (visits)");
+        visit.hostId = requireField<int64_t>(row, "host_id", "/load_objects.fcgi (visits)");
+        visit.beginTime = requireField<int64_t>(row, "begin_time", "/load_objects.fcgi (visits)");
+        visit.endTime = requireField<int64_t>(row, "end_time", "/load_objects.fcgi (visits)");
+        auto finishedIt = row.find("finished");
+        visit.finished = finishedIt != row.end() && !finishedIt->is_null() &&
+                          ((finishedIt->is_boolean() && finishedIt->get<bool>()) ||
+                           (finishedIt->is_number_integer() && finishedIt->get<int64_t>() != 0));
+        auto visitorNameIt = namesById.find(visit.visitorId);
+        if (visitorNameIt != namesById.end()) {
+            visit.visitorName = visitorNameIt->second.first;
+        }
+        auto hostNameIt = namesById.find(visit.hostId);
+        if (hostNameIt != namesById.end()) {
+            visit.hostName = hostNameIt->second.first;
+        }
+        visit.cardCount = runCountQuery(detail::buildCardCountBody(visit.visitorId), "cards");
+        return visit;
+    }
+
+    std::vector<Visit> listVisits(const VisitQuery& query) {
+        const int limit = resolveLimit(query.limit);
+        nlohmann::json body = detail::buildVisitsListBody(limit, query.offset);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+
+        auto visitsIt = response.find("visits");
+        if (visitsIt == response.end() || !visitsIt->is_array()) {
+            throw ProtocolError("missing required field 'visits' in response from /load_objects.fcgi");
+        }
+
+        std::vector<int64_t> ids;
+        ids.reserve(visitsIt->size() * 2);
+        for (const auto& row : *visitsIt) {
+            ids.push_back(requireField<int64_t>(row, "visitor_id", "/load_objects.fcgi (visits)"));
+            ids.push_back(requireField<int64_t>(row, "host_id", "/load_objects.fcgi (visits)"));
+        }
+        auto namesById = getUserNamesByIds(ids);
+
+        std::vector<Visit> result;
+        result.reserve(visitsIt->size());
+        for (const auto& row : *visitsIt) {
+            result.push_back(mapVisit(row, namesById));
+        }
+        return result;
+    }
+
+    std::optional<Visit> getVisit(int64_t id) {
+        nlohmann::json body = detail::buildVisitGetBody(id);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+
+        auto visitsIt = response.find("visits");
+        if (visitsIt == response.end() || !visitsIt->is_array()) {
+            throw ProtocolError("missing required field 'visits' in response from /load_objects.fcgi");
+        }
+        if (visitsIt->empty()) {
+            return std::nullopt;
+        }
+        const auto& row = visitsIt->front();
+        std::vector<int64_t> ids = {
+            requireField<int64_t>(row, "visitor_id", "/load_objects.fcgi (visits)"),
+            requireField<int64_t>(row, "host_id", "/load_objects.fcgi (visits)"),
+        };
+        auto namesById = getUserNamesByIds(ids);
+        return mapVisit(row, namesById);
+    }
+
+    int64_t createVisit(const NewVisit& visit) {
+        nlohmann::json body = detail::buildVisitCreateBody(visit.visitorId, visit.hostId,
+                                                             visit.beginTime, visit.endTime);
+        nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
+
+        nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
+        if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        return ids.front().get<int64_t>();
+    }
+
+    void updateVisit(const VisitUpdate& visit) {
+        nlohmann::json body = detail::buildVisitUpdateBody(visit.id, visit.visitorId, visit.hostId,
+                                                             visit.beginTime, visit.endTime);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeVisit(int64_t id) {
+        // Does NOT cascade-revoke the visitor's cards -- only finish()
+        // does that, matching confirmed device behavior (spec.md Risks).
+        nlohmann::json body = detail::buildVisitDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
+    /// Marks a visit concluded (spec.md Decision 4): revokes every card
+    /// currently issued to its visitor, then sets finished=1/end_time=now
+    /// on the visit itself -- mirrors the real device's own two-step
+    /// save() side effect (class.js's finished-branch save(), read
+    /// statically this session).
+    void finishVisit(int64_t id) {
+        std::optional<Visit> visit = getVisit(id);
+        if (!visit.has_value()) {
+            throw ProtocolError("visit " + std::to_string(id) + " not found");
+        }
+
+        // No throw-on-zero-changes: the visitor may legitimately have
+        // zero cards to revoke.
+        postAuthenticatedJson("/destroy_objects.fcgi", detail::buildUserCardsDeleteBody(visit->visitorId));
+
+        auto timestamp = static_cast<int64_t>(std::time(nullptr));
+        nlohmann::json body = detail::buildVisitFinishBody(id, timestamp);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
     }
 
     std::string debugGetObjectMetadataJson() {
@@ -621,6 +955,9 @@ void AmicoClient::logout() { impl_->logout(); }
 std::string AmicoClient::debugGetObjectMetadataJson() { return impl_->debugGetObjectMetadataJson(); }
 
 std::vector<AmicoUser> AmicoClient::listUsersImpl(const UserQuery& query) { return impl_->listUsers(query); }
+std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::getUserNamesByIdsImpl(const std::vector<int64_t>& ids) {
+    return impl_->getUserNamesByIds(ids);
+}
 std::optional<AmicoUser> AmicoClient::getUserImpl(int64_t id) { return impl_->getUser(id); }
 int64_t AmicoClient::createUserImpl(const NewUser& user) { return impl_->createUser(user); }
 void AmicoClient::updateUserImpl(const UserUpdate& user) { impl_->updateUser(user); }
@@ -659,8 +996,24 @@ void AmicoClient::setUserPasswordImpl(int64_t userId, const std::string& plainte
     impl_->setUserPassword(userId, plaintextPassword);
 }
 std::vector<AccessLogEntry> AmicoClient::listAccessLogsImpl(const AccessLogQuery& query) { return impl_->listAccessLogs(query); }
+int64_t AmicoClient::accessLogsCountImpl(const AccessLogQuery& query) { return impl_->accessLogsCount(query); }
+std::vector<Portal> AmicoClient::listPortalsImpl() { return impl_->listPortals(); }
+std::vector<Group> AmicoClient::listGroupsImpl() { return impl_->listGroups(); }
+std::vector<TimeZone> AmicoClient::listTimeZonesImpl() { return impl_->listTimeZones(); }
+std::map<int64_t, std::string> AmicoClient::timeZoneNamesForAccessLogIdsImpl(const std::vector<int64_t>& accessLogIds) {
+    return impl_->timeZoneNamesForAccessLogIds(accessLogIds);
+}
+std::vector<Visit> AmicoClient::listVisitsImpl(const VisitQuery& query) { return impl_->listVisits(query); }
+std::optional<Visit> AmicoClient::getVisitImpl(int64_t id) { return impl_->getVisit(id); }
+int64_t AmicoClient::createVisitImpl(const NewVisit& visit) { return impl_->createVisit(visit); }
+void AmicoClient::updateVisitImpl(const VisitUpdate& visit) { impl_->updateVisit(visit); }
+void AmicoClient::removeVisitImpl(int64_t id) { impl_->removeVisit(id); }
+void AmicoClient::finishVisitImpl(int64_t id) { impl_->finishVisit(id); }
 
 std::vector<AmicoUser> AmicoClient::UsersApi::list(const UserQuery& query) { return owner_->listUsersImpl(query); }
+std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::UsersApi::getNamesByIds(const std::vector<int64_t>& ids) {
+    return owner_->getUserNamesByIdsImpl(ids);
+}
 std::optional<AmicoUser> AmicoClient::UsersApi::get(int64_t id) { return owner_->getUserImpl(id); }
 int64_t AmicoClient::UsersApi::create(const NewUser& user) { return owner_->createUserImpl(user); }
 void AmicoClient::UsersApi::update(const UserUpdate& user) { owner_->updateUserImpl(user); }
@@ -679,6 +1032,19 @@ void AmicoClient::UsersApi::setPassword(int64_t userId, const std::string& plain
     owner_->setUserPasswordImpl(userId, plaintextPassword);
 }
 std::vector<AccessLogEntry> AmicoClient::AccessLogsApi::list(const AccessLogQuery& query) { return owner_->listAccessLogsImpl(query); }
+int64_t AmicoClient::AccessLogsApi::accessLogsCount(const AccessLogQuery& query) { return owner_->accessLogsCountImpl(query); }
+std::vector<Portal> AmicoClient::PortalsApi::list() { return owner_->listPortalsImpl(); }
+std::vector<Group> AmicoClient::GroupsApi::list() { return owner_->listGroupsImpl(); }
+std::vector<TimeZone> AmicoClient::TimeZonesApi::list() { return owner_->listTimeZonesImpl(); }
+std::map<int64_t, std::string> AmicoClient::AccessLogsApi::timeZoneNamesForAccessLogIds(const std::vector<int64_t>& accessLogIds) {
+    return owner_->timeZoneNamesForAccessLogIdsImpl(accessLogIds);
+}
+std::vector<Visit> AmicoClient::VisitsApi::list(const VisitQuery& query) { return owner_->listVisitsImpl(query); }
+std::optional<Visit> AmicoClient::VisitsApi::get(int64_t id) { return owner_->getVisitImpl(id); }
+int64_t AmicoClient::VisitsApi::create(const NewVisit& visit) { return owner_->createVisitImpl(visit); }
+void AmicoClient::VisitsApi::update(const VisitUpdate& visit) { owner_->updateVisitImpl(visit); }
+void AmicoClient::VisitsApi::remove(int64_t id) { owner_->removeVisitImpl(id); }
+void AmicoClient::VisitsApi::finish(int64_t id) { owner_->finishVisitImpl(id); }
 
 void setTransportForTesting(AmicoClient& client, std::unique_ptr<IHttpTransport> transport) {
     client.impl_->transport = std::move(transport);

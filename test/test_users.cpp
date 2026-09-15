@@ -49,7 +49,7 @@ TEST_CASE("scenario 8: user-list parsing maps the confirmed default-filter respo
     CHECK(users[0].name == "Test User A");
     CHECK(users[1].id == 36);
     CHECK(users[2].id == 4);
-    CHECK(fake->requestLog.size() == 20);  // login + users + 6 queries per user
+    CHECK(fake->requestLog.size() == 23);  // login + users + 7 queries per user (added: c_users cpf lookup)
     for (const auto& user : users) {
         CHECK(user.groupIds.empty());
         CHECK(user.groupCount == 0);
@@ -144,7 +144,7 @@ TEST_CASE("scenario 21: UsersApi::get(id) found returns the mapped AmicoUser") {
     REQUIRE(user.has_value());
     CHECK(user->id == 36);
     CHECK(user->name == "Test User B");
-    CHECK(fake->requestLog.size() == 8);  // login + users + 6 profile queries
+    CHECK(fake->requestLog.size() == 9);  // login + users + 7 profile queries (added: c_users cpf lookup)
 }
 
 TEST_CASE("scenario 22: UsersApi::get(id) not found returns an empty optional") {
@@ -232,14 +232,28 @@ TEST_CASE("UsersApi::update omits unset fields and preserves explicitly empty st
     CHECK_NOTHROW(client.users().update(user));
 }
 
-TEST_CASE("UsersApi::remove sends a single-id array to destroy_objects") {
+TEST_CASE("UsersApi::remove sends a single-id array to destroy_objects (plus the defensive c_users cleanup, Visitors plan 2026-09-14)") {
     FakeTransport* fake = nullptr;
     AmicoClient client = loggedInClient(&fake);
 
-    fake->responder = [](const HttpRequest& req) {
+    int cUsersDeleteCalls = 0;
+    int usersDeleteCalls = 0;
+    fake->responder = [&](const HttpRequest& req) {
         CHECK(req.method == "POST");
         CHECK(req.path == "/destroy_objects.fcgi");
         nlohmann::json body = nlohmann::json::parse(req.body);
+        if (body["object"] == "c_users") {
+            ++cUsersDeleteCalls;
+            nlohmann::json expected = {
+                {"object", "c_users"},
+                {"where", {{"c_users", {{"user_id", 12345}}}}},
+            };
+            CHECK(body == expected);
+            CHECK(cUsersDeleteCalls == 1);  // must happen before the users delete
+            CHECK(usersDeleteCalls == 0);
+            return FakeTransport::ok(R"({"changes": 0})");  // no c_users row for this test user
+        }
+        ++usersDeleteCalls;
         nlohmann::json expected = {
             {"object", "users"},
             {"where", {{"users", {{"id", nlohmann::json::array({12345})}}}}},
@@ -249,7 +263,9 @@ TEST_CASE("UsersApi::remove sends a single-id array to destroy_objects") {
     };
 
     CHECK_NOTHROW(client.users().remove(12345));
-    CHECK(fake->requestLog.size() == 2);
+    CHECK(cUsersDeleteCalls == 1);
+    CHECK(usersDeleteCalls == 1);
+    CHECK(fake->requestLog.size() == 3);  // login + c_users cleanup + users delete
 }
 
 TEST_CASE("UsersApi::create rejects an error response with ProtocolError") {

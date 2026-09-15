@@ -1,0 +1,296 @@
+{
+  "info": {
+    "name": "AMICO Device — Direct (no backend)",
+    "description": "Talks straight to the real device's own HTTP API -- amico_backend.exe does NOT need to be running for anything in this collection. Read docs/device-direct-api.md first: no Set-Cookie is ever sent by the device, raw user queries include password/salt, and there is no X-Confirm-Sensitive-Action guard here. Run 'Login' first -- its Tests script stores the session token in a collection variable that every other request's Cookie header reuses.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "deviceUrl", "value": "http://192.168.2.156" },
+    { "key": "deviceUser", "value": "Admin" },
+    { "key": "devicePassword", "value": "YOUR_DEVICE_PASSWORD_HERE" },
+    { "key": "session", "value": "" },
+    { "key": "userId", "value": "1" },
+    { "key": "groupId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Login",
+      "event": [
+        {
+          "listen": "test",
+          "script": {
+            "exec": [
+              "const body = pm.response.json();",
+              "pm.collectionVariables.set('session', body.session);",
+              "pm.test('got a session token', () => pm.expect(body.session).to.be.a('string').and.not.empty);"
+            ]
+          }
+        }
+      ],
+      "request": {
+        "method": "POST",
+        "header": [
+          { "key": "Content-Type", "value": "application/x-www-form-urlencoded" },
+          { "key": "Cookie", "value": "login={{deviceUser}}" }
+        ],
+        "body": { "mode": "urlencoded", "urlencoded": [
+          { "key": "login", "value": "{{deviceUser}}" },
+          { "key": "password", "value": "{{devicePassword}}" }
+        ] },
+        "url": { "raw": "{{deviceUrl}}/hidlogin.fcgi", "host": ["{{deviceUrl}}"], "path": ["hidlogin.fcgi"] },
+        "description": "The device never sends Set-Cookie -- the Tests script above is what makes every later request's Cookie header work."
+      }
+    },
+    {
+      "name": "Logout",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }],
+        "url": { "raw": "{{deviceUrl}}/logout.fcgi", "host": ["{{deviceUrl}}"], "path": ["logout.fcgi"] }
+      }
+    },
+    {
+      "name": "Health (plain reachability check)",
+      "request": {
+        "method": "GET",
+        "url": { "raw": "{{deviceUrl}}/", "host": ["{{deviceUrl}}"], "path": [""] },
+        "description": "No cookie needed. Any successful HTTP response means the device is up -- same check amico_backend's own GET /health does underneath."
+      }
+    },
+    {
+      "name": "System information",
+      "request": {
+        "method": "POST",
+        "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+        "body": { "mode": "raw", "raw": "{}" },
+        "url": { "raw": "{{deviceUrl}}/system_information.fcgi", "host": ["{{deviceUrl}}"], "path": ["system_information.fcgi"] }
+      }
+    },
+    {
+      "name": "Users (raw query language)",
+      "item": [
+        {
+          "name": "List users (regular, no password/salt requested)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"join\": \"LEFT\",\n  \"object\": \"users\",\n  \"fields\": [\"id\", \"name\", \"registration\", \"user_type_id\", \"begin_time\", \"end_time\", \"last_access\"],\n  \"where\": [\n    {\"field\": \"user_type_id\", \"operator\": \"=\", \"value\": 0, \"connector\": \"OR\"},\n    {\"field\": \"user_type_id\", \"operator\": \"IS NULL\", \"connector\": \") AND (\"}\n  ],\n  \"order\": [\"name\"],\n  \"limit\": 50,\n  \"offset\": 0,\n  \"finish\": true\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "List visitors (user_type_id = 1)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"join\": \"LEFT\",\n  \"object\": \"users\",\n  \"fields\": [\"id\", \"name\", \"registration\", \"user_type_id\", \"begin_time\", \"end_time\", \"last_access\"],\n  \"where\": [{\"field\": \"id\", \"object\": \"user_types\", \"value\": 1}],\n  \"order\": [\"name\"],\n  \"limit\": 50,\n  \"offset\": 0,\n  \"finish\": true\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "Create user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"users\",\n  \"values\": [{\"name\": \"ZZ_DirectTest\", \"registration\": \"\"}]\n}" },
+            "url": { "raw": "{{deviceUrl}}/create_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["create_objects.fcgi"] },
+            "description": "Response: {\"ids\":[<new id>]}. values is a one-element ARRAY for create_objects."
+          }
+        },
+        {
+          "name": "Update user (name/begin_time/end_time)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"users\",\n  \"values\": {\"name\": \"ZZ_DirectTest\", \"begin_time\": 1789347600, \"end_time\": 1789513200},\n  \"where\": {\"users\": {\"id\": {{userId}}}}\n}" },
+            "url": { "raw": "{{deviceUrl}}/modify_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["modify_objects.fcgi"] },
+            "description": "Response: {\"changes\": <n>}. values is a bare OBJECT for modify_objects (unlike create_objects)."
+          }
+        },
+        {
+          "name": "Delete user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"users\",\n  \"where\": {\"users\": {\"id\": [{{userId}}]}}\n}" },
+            "url": { "raw": "{{deviceUrl}}/destroy_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["destroy_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "Add user to group",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"user_groups\",\n  \"values\": [{\"group_id\": {{groupId}}, \"user_id\": {{userId}}}]\n}" },
+            "url": { "raw": "{{deviceUrl}}/create_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["create_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "Remove user from group",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"user_groups\",\n  \"where\": {\"user_groups\": {\"group_id\": [{{groupId}}], \"user_id\": {{userId}}}}\n}" },
+            "url": { "raw": "{{deviceUrl}}/destroy_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["destroy_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "Grant Administrator",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"user_roles\",\n  \"values\": [{\"user_id\": {{userId}}, \"role\": 1}]\n}" },
+            "url": { "raw": "{{deviceUrl}}/create_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["create_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "Revoke Administrator",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"user_roles\",\n  \"where\": {\"user_roles\": {\"user_id\": {{userId}}, \"role\": 1}}\n}" },
+            "url": { "raw": "{{deviceUrl}}/destroy_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["destroy_objects.fcgi"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Face image",
+      "item": [
+        {
+          "name": "Get face image",
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }],
+            "url": { "raw": "{{deviceUrl}}/user_get_image.fcgi?user_id={{userId}}", "host": ["{{deviceUrl}}"], "path": ["user_get_image.fcgi"], "query": [{ "key": "user_id", "value": "{{userId}}" }] }
+          }
+        },
+        {
+          "name": "Set face image (enrolls face template)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" },
+              { "key": "Content-Type", "value": "image/jpeg" }
+            ],
+            "body": { "mode": "file", "file": {} },
+            "url": {
+              "raw": "{{deviceUrl}}/user_set_image.fcgi?user_id={{userId}}&match=1&timestamp=1789347600",
+              "host": ["{{deviceUrl}}"], "path": ["user_set_image.fcgi"],
+              "query": [{ "key": "user_id", "value": "{{userId}}" }, { "key": "match", "value": "1" }, { "key": "timestamp", "value": "1789347600" }]
+            },
+            "description": "timestamp must be a current unix-seconds value, not this stale example -- update it before sending. Pick a JPEG in Postman's Body > binary picker."
+          }
+        },
+        {
+          "name": "Remove face image",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"user_id\": {{userId}}\n}" },
+            "url": { "raw": "{{deviceUrl}}/user_destroy_image.fcgi", "host": ["{{deviceUrl}}"], "path": ["user_destroy_image.fcgi"] },
+            "description": "The real UI's own flow also runs 'Remove face_templates rows' (destroy_objects on face_templates, where user_id) right after this -- add that call too for exact parity."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Password / PIN",
+      "item": [
+        {
+          "name": "1. Hash password",
+          "event": [
+            {
+              "listen": "test",
+              "script": { "exec": [
+                "const body = pm.response.json();",
+                "pm.collectionVariables.set('hashedPassword', body.password);",
+                "pm.collectionVariables.set('passwordSalt', body.salt);"
+              ] }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"password\": \"1234\"\n}" },
+            "url": { "raw": "{{deviceUrl}}/user_hash_password.fcgi", "host": ["{{deviceUrl}}"], "path": ["user_hash_password.fcgi"] }
+          }
+        },
+        {
+          "name": "2. Write hashed password to user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"users\",\n  \"values\": {\"password\": \"{{hashedPassword}}\", \"salt\": \"{{passwordSalt}}\"},\n  \"where\": {\"users\": {\"id\": {{userId}}}}\n}" },
+            "url": { "raw": "{{deviceUrl}}/modify_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["modify_objects.fcgi"] },
+            "description": "Run '1. Hash password' first in the same Postman run -- it fills hashedPassword/passwordSalt. There is no endpoint that reads a password/PIN back in plaintext, by design."
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lookups",
+      "item": [
+        {
+          "name": "List groups",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"groups\",\n  \"fields\": [\"id\", \"name\"]\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "List time zones",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"time_zones\",\n  \"fields\": [\"id\", \"name\"]\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "List portals",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"portals\",\n  \"fields\": [\"id\", \"name\"]\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Access logs",
+      "item": [
+        {
+          "name": "List access logs (date range only)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"join\": \"LEFT\",\n  \"object\": \"access_logs\",\n  \"fields\": [\"id\", \"time\", \"user_id\", \"portal_id\", \"log_type_id\", \"event\", \"identifier_id\"],\n  \"where\": [\n    {\"field\": \"time\", \"operator\": \">=\", \"value\": 1789166400},\n    {\"field\": \"time\", \"operator\": \"<=\", \"value\": 1789430399}\n  ],\n  \"order\": [\"time\", \"descending\"],\n  \"limit\": 10,\n  \"offset\": 0,\n  \"finish\": true\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "List access logs (user/group/timezone filters, nested dialect)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"join\": \"LEFT\",\n  \"object\": \"access_logs\",\n  \"fields\": [\"id\", \"time\", \"user_id\", \"portal_id\", \"log_type_id\", \"event\", \"identifier_id\"],\n  \"where\": {\n    \"access_logs\": {\"time\": {\">=\": 1789166400, \"<=\": 1789430399}},\n    \"users\": {\"id\": [{{userId}}]},\n    \"groups\": {\"id\": [{{groupId}}]}\n  },\n  \"order\": [\"time\", \"descending\"],\n  \"limit\": 10,\n  \"offset\": 0,\n  \"finish\": true\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        },
+        {
+          "name": "Count access logs (same where, COUNT(*))",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Cookie", "value": "login={{deviceUser}}; session={{session}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"object\": \"access_logs\",\n  \"fields\": [\"COUNT(*)\"],\n  \"where\": [\n    {\"field\": \"time\", \"operator\": \">=\", \"value\": 1789166400},\n    {\"field\": \"time\", \"operator\": \"<=\", \"value\": 1789430399}\n  ]\n}" },
+            "url": { "raw": "{{deviceUrl}}/load_objects.fcgi", "host": ["{{deviceUrl}}"], "path": ["load_objects.fcgi"] }
+          }
+        }
+      ]
+    }
+  ]
+}

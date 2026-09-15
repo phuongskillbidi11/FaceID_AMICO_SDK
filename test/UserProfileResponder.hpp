@@ -30,6 +30,12 @@ inline std::optional<HttpResponse> emptyUserProfileResponse(const HttpRequest& r
     if (object == "users" && fields == nlohmann::json::array({"password"})) {
         return FakeTransport::ok(R"({"users":[{"password":""}]})");
     }
+    // Visitors plan (2026-09-14): mapUser() now also looks up cpf via a
+    // c_users query -- default to "no row" (no CPF) so every existing
+    // test using this responder doesn't need to know about it.
+    if (object == "c_users" && fields == nlohmann::json::array({"id", "cpf"})) {
+        return FakeTransport::ok(R"({"c_users":[]})");
+    }
     return std::nullopt;
 }
 

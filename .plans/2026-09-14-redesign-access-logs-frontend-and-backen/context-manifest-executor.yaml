@@ -1,0 +1,12 @@
+role: executor
+plan: 2026-09-14-redesign-access-logs-frontend-and-backen
+generated_at: 2026-09-13T18:03:37Z
+request: "The real AMICO device's own \"Access (Global)\" report page\n(`http://192.168.2.156/en_US/html/reportcustomview.html?report=1`)\nshows a rich, human-readable access-log table — resolved user/portal/\ntime-zone names, a plain-English Authorization label (\"Granted\" /\n\"Not authorized\" / \"Not recognized\"), a plain-English Identification\nlabel (\"Facial\", \"Card\", \"PIN\", ...), a per-page size selector\n(10/20/30), and full pagination (\"Showing from 1 to 10 of 158\nrecords\"). Our own `frontend/access-logs.js` currently shows only 6\nraw technical columns (`id, time, userId, portalId, logTypeId, event`)\nwith no joins and no pagination — the exact gap the user pointed out\nby directly comparing the two pages side by side.\n\n**Done looks like:** The Access Logs tab shows the same 8 columns as\nthe real device's report, in the same order, with the same\nhuman-readable values (names instead of raw IDs, plain-English\nAuthorization/Identification labels instead of raw integers), plus a\nworking per-page selector and page navigation — while keeping this\nproject's existing Start/End date-time filters (the real device's\n\"Start Date/End Date/Start Time/End Time\" fields, already present in\nour own from/to fields, just not yet split into separate date+time\ninputs — see Decision 4).\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - linux: "matched request text"
+  - siemens-s7: "matched request text"
+  - reverse-engineering: "matched request text"
+  - plc: "required by automation/siemens-s7"
+tools:

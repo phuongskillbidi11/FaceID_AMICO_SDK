@@ -7,7 +7,7 @@ const std::vector<std::string> kUserFields = {
 };
 
 const std::vector<std::string> kAccessLogFields = {
-    "id", "time", "user_id", "portal_id", "log_type_id", "event",
+    "id", "time", "user_id", "portal_id", "log_type_id", "event", "identifier_id",
 };
 
 const std::vector<std::string> kUserWritableFields = {
@@ -26,15 +26,25 @@ const std::vector<std::string> kUserRoleWritableFields = {
     "user_id", "role",
 };
 
-nlohmann::json buildUsersListBody(int limit, int offset) {
+const std::vector<std::string> kVisitFields = {
+    "id", "visitor_id", "host_id", "begin_time", "end_time", "finished",
+};
+
+nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
     nlohmann::json body;
     body["join"] = "LEFT";
     body["object"] = "users";
     body["fields"] = kUserFields;
-    body["where"] = nlohmann::json::array({
-        {{"field", "user_type_id"}, {"operator", "="}, {"value", 0}, {"connector", "OR"}},
-        {{"field", "user_type_id"}, {"operator", "IS NULL"}, {"connector", ") AND ("}},
-    });
+    if (userTypeId.has_value()) {
+        body["where"] = nlohmann::json::array({
+            {{"field", "id"}, {"object", "user_types"}, {"value", *userTypeId}},
+        });
+    } else {
+        body["where"] = nlohmann::json::array({
+            {{"field", "user_type_id"}, {"operator", "="}, {"value", 0}, {"connector", "OR"}},
+            {{"field", "user_type_id"}, {"operator", "IS NULL"}, {"connector", ") AND ("}},
+        });
+    }
     body["order"] = nlohmann::json::array({"name"});
     body["limit"] = limit;
     body["offset"] = offset;
@@ -56,18 +66,40 @@ nlohmann::json buildUserGetBody(int64_t id) {
     return body;
 }
 
-nlohmann::json buildAccessLogsListBody(std::optional<int64_t> to, int limit, int offset) {
+namespace {
+
+nlohmann::json buildAccessLogsWhere(std::optional<int64_t> from, std::optional<int64_t> to, const std::optional<std::vector<int64_t>>& userIds, const std::optional<std::vector<int64_t>>& groupIds, const std::optional<std::vector<int64_t>>& timeZoneIds) {
+    const auto selected = [](const auto& ids) { return ids && !ids->empty(); };
+    if (selected(userIds) || selected(groupIds) || selected(timeZoneIds)) {
+        auto where = nlohmann::json::object();
+        where["access_logs"] = nlohmann::json::object();
+        if (from) where["access_logs"]["time"][">="] = *from;
+        if (to) where["access_logs"]["time"]["<="] = *to;
+        if (selected(userIds)) where["users"]["id"] = *userIds;
+        if (selected(groupIds)) where["groups"]["id"] = *groupIds;
+        if (selected(timeZoneIds)) where["time_zones"]["id"] = *timeZoneIds;
+        return where;
+    }
+    // Preserve the legacy request byte-for-byte when no new filter is selected.
+    auto where = nlohmann::json::array();
+    if (from.has_value()) {
+        where.push_back({{"field", "time"}, {"operator", ">="}, {"value", *from}});
+    }
+    if (to.has_value()) {
+        where.push_back({{"field", "time"}, {"operator", "<="}, {"value", *to}});
+    }
+    return where;
+}
+
+}  // namespace
+
+nlohmann::json buildAccessLogsListBody(std::optional<int64_t> from, std::optional<int64_t> to,
+                                       int limit, int offset, const std::optional<std::vector<int64_t>>& userIds, const std::optional<std::vector<int64_t>>& groupIds, const std::optional<std::vector<int64_t>>& timeZoneIds) {
     nlohmann::json body;
     body["join"] = "LEFT";
     body["object"] = "access_logs";
     body["fields"] = kAccessLogFields;
-    if (to.has_value()) {
-        body["where"] = nlohmann::json::array({
-            {{"field", "time"}, {"operator", "<="}, {"value", *to}},
-        });
-    } else {
-        body["where"] = nlohmann::json::array();
-    }
+    body["where"] = buildAccessLogsWhere(from, to, userIds, groupIds, timeZoneIds);
     body["order"] = nlohmann::json::array({"time", "descending"});
     body["limit"] = limit;
     body["offset"] = offset;
@@ -75,7 +107,61 @@ nlohmann::json buildAccessLogsListBody(std::optional<int64_t> to, int limit, int
     return body;
 }
 
-nlohmann::json buildUserCreateBody(const std::string& name, const std::string& registration) {
+nlohmann::json buildAccessLogsCountBody(std::optional<int64_t> from, std::optional<int64_t> to, const std::optional<std::vector<int64_t>>& userIds, const std::optional<std::vector<int64_t>>& groupIds, const std::optional<std::vector<int64_t>>& timeZoneIds) {
+    nlohmann::json body;
+    body["object"] = "access_logs";
+    body["fields"] = nlohmann::json::array({"COUNT(*)"});
+    body["where"] = buildAccessLogsWhere(from, to, userIds, groupIds, timeZoneIds);
+    return body;
+}
+
+nlohmann::json buildPortalsListBody() {
+    nlohmann::json body;
+    body["object"] = "portals";
+    body["fields"] = nlohmann::json::array({"id", "name"});
+    return body;
+}
+
+nlohmann::json buildGroupsListBody() {
+    nlohmann::json body;
+    body["object"] = "groups";
+    body["fields"] = nlohmann::json::array({"id", "name"});
+    return body;
+}
+
+nlohmann::json buildTimeZonesListBody() {
+    nlohmann::json body;
+    body["object"] = "time_zones";
+    body["fields"] = nlohmann::json::array({"id", "name"});
+    return body;
+}
+
+nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids) {
+    nlohmann::json body;
+    body["object"] = "users";
+    body["fields"] = nlohmann::json::array({"id", "name", "registration"});
+    body["where"] = {{"users", {{"id", ids}}}};
+    return body;
+}
+
+nlohmann::json buildAccessLogAccessRulesBody(const std::vector<int64_t>& accessLogIds) {
+    nlohmann::json body;
+    body["object"] = "access_log_access_rules";
+    body["fields"] = nlohmann::json::array({"access_log_id", "access_rule_id"});
+    body["where"] = {{"access_log_access_rules", {{"access_log_id", accessLogIds}}}};
+    return body;
+}
+
+nlohmann::json buildAccessRuleTimeZonesBody(const std::vector<int64_t>& accessRuleIds) {
+    nlohmann::json body;
+    body["object"] = "access_rule_time_zones";
+    body["fields"] = nlohmann::json::array({"access_rule_id", "time_zone_id"});
+    body["where"] = {{"access_rule_time_zones", {{"access_rule_id", accessRuleIds}}}};
+    return body;
+}
+
+nlohmann::json buildUserCreateBody(const std::string& name, const std::string& registration,
+                                    std::optional<int64_t> userTypeId) {
     // "values" is a one-element ARRAY here, not a bare object -- confirmed
     // live (2026-09-12, Task 5.2 attempt #1: a bare-object body was
     // rejected with HTTP 400). messenger.js's Messenger.save() calls
@@ -84,12 +170,17 @@ nlohmann::json buildUserCreateBody(const std::string& name, const std::string& r
     // same source file.
     nlohmann::json body;
     body["object"] = "users";
-    body["values"] = nlohmann::json::array({{{"name", name}, {"registration", registration}}});
+    nlohmann::json values = {{"name", name}, {"registration", registration}};
+    if (userTypeId.has_value()) {
+        values["user_type_id"] = *userTypeId;
+    }
+    body["values"] = nlohmann::json::array({values});
     return body;
 }
 
 nlohmann::json buildUserUpdateBody(int64_t id, const std::optional<std::string>& name,
-                                  const std::optional<std::string>& registration) {
+                                  const std::optional<std::string>& registration,
+                                  std::optional<int64_t> beginTime, std::optional<int64_t> endTime) {
     nlohmann::json body;
     body["object"] = "users";
     body["values"] = nlohmann::json::object();
@@ -98,6 +189,12 @@ nlohmann::json buildUserUpdateBody(int64_t id, const std::optional<std::string>&
     }
     if (registration.has_value()) {
         body["values"]["registration"] = *registration;
+    }
+    if (beginTime.has_value()) {
+        body["values"]["begin_time"] = *beginTime;
+    }
+    if (endTime.has_value()) {
+        body["values"]["end_time"] = *endTime;
     }
     body["where"] = {{"users", {{"id", id}}}};
     return body;
@@ -221,6 +318,133 @@ nlohmann::json buildFaceTemplatesDeleteBody(int64_t userId) {
     nlohmann::json body;
     body["object"] = "face_templates";
     body["where"] = {{"face_templates", {{"user_id", userId}}}};
+    return body;
+}
+
+nlohmann::json buildCUsersGetBody(int64_t userId) {
+    nlohmann::json body;
+    body["object"] = "c_users";
+    body["fields"] = nlohmann::json::array({"id", "cpf"});
+    body["where"] = nlohmann::json::array({
+        {{"field", "user_id"}, {"value", userId}},
+    });
+    return body;
+}
+
+nlohmann::json buildCUsersCreateBody(int64_t userId, const std::string& cpf) {
+    nlohmann::json body;
+    body["object"] = "c_users";
+    body["values"] = nlohmann::json::array({{{"user_id", userId}, {"cpf", cpf}}});
+    return body;
+}
+
+nlohmann::json buildCUsersUpdateBody(int64_t cUsersRowId, const std::string& cpf) {
+    nlohmann::json body;
+    body["object"] = "c_users";
+    body["values"] = {{"cpf", cpf}};
+    body["where"] = {{"c_users", {{"id", cUsersRowId}}}};
+    return body;
+}
+
+nlohmann::json buildCUsersDeleteBody(int64_t userId) {
+    nlohmann::json body;
+    body["object"] = "c_users";
+    body["where"] = {{"c_users", {{"user_id", userId}}}};
+    return body;
+}
+
+nlohmann::json buildVisitsListBody(int limit, int offset) {
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "visits";
+    body["fields"] = kVisitFields;
+    body["where"] = nlohmann::json::array({
+        {{"field", "finished"}, {"operator", "!="}, {"value", 1}},
+    });
+    body["order"] = nlohmann::json::array({"id"});
+    body["limit"] = limit;
+    body["offset"] = offset;
+    body["finish"] = true;
+    return body;
+}
+
+nlohmann::json buildVisitGetBody(int64_t id) {
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "visits";
+    body["fields"] = kVisitFields;
+    body["where"] = nlohmann::json::array({
+        {{"field", "id"}, {"value", id}},
+    });
+    body["order"] = nlohmann::json::array({"id"});
+    body["limit"] = 1;
+    body["offset"] = 0;
+    return body;
+}
+
+nlohmann::json buildVisitCreateBody(int64_t visitorId, int64_t hostId,
+                                     int64_t beginTime, int64_t endTime) {
+    // Verbatim shape captured live 2026-09-14 (spec.md Background) --
+    // unlike buildUserCreateBody, this real capture includes
+    // join/fields/where/order alongside "values".
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "visits";
+    body["fields"] = kVisitFields;
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"id"});
+    body["values"] = nlohmann::json::array({{
+        {"visitor_id", visitorId},
+        {"host_id", hostId},
+        {"begin_time", beginTime},
+        {"end_time", endTime},
+        {"finished", 0},
+    }});
+    return body;
+}
+
+nlohmann::json buildVisitUpdateBody(int64_t id, std::optional<int64_t> visitorId,
+                                     std::optional<int64_t> hostId,
+                                     std::optional<int64_t> beginTime,
+                                     std::optional<int64_t> endTime) {
+    nlohmann::json body;
+    body["object"] = "visits";
+    body["values"] = nlohmann::json::object();
+    if (visitorId.has_value()) {
+        body["values"]["visitor_id"] = *visitorId;
+    }
+    if (hostId.has_value()) {
+        body["values"]["host_id"] = *hostId;
+    }
+    if (beginTime.has_value()) {
+        body["values"]["begin_time"] = *beginTime;
+    }
+    if (endTime.has_value()) {
+        body["values"]["end_time"] = *endTime;
+    }
+    body["where"] = {{"visits", {{"id", id}}}};
+    return body;
+}
+
+nlohmann::json buildVisitDeleteBody(int64_t id) {
+    nlohmann::json body;
+    body["object"] = "visits";
+    body["where"] = {{"visits", {{"id", nlohmann::json::array({id})}}}};
+    return body;
+}
+
+nlohmann::json buildVisitFinishBody(int64_t id, int64_t endTime) {
+    nlohmann::json body;
+    body["object"] = "visits";
+    body["values"] = {{"finished", 1}, {"end_time", endTime}};
+    body["where"] = {{"visits", {{"id", id}}}};
+    return body;
+}
+
+nlohmann::json buildUserCardsDeleteBody(int64_t userId) {
+    nlohmann::json body;
+    body["object"] = "cards";
+    body["where"] = {{"cards", {{"user_id", userId}}}};
     return body;
 }
 

@@ -78,10 +78,18 @@ struct CurlSlistDeleter {
 
 }  // namespace
 
-CurlTransport::CurlTransport(std::string baseUrl) : baseUrl_(std::move(baseUrl)) {}
+CurlTransport::CurlTransport(std::string baseUrl) : baseUrl_(std::move(baseUrl)) {
+    curl_ = curl_easy_init();
+}
+
+CurlTransport::~CurlTransport() {
+    if (curl_ != nullptr) {
+        curl_easy_cleanup(static_cast<CURL*>(curl_));
+    }
+}
 
 HttpResponse CurlTransport::send(const HttpRequest& request) {
-    CURL* curl = curl_easy_init();
+    CURL* curl = static_cast<CURL*>(curl_);
     if (curl == nullptr) {
         throw NetworkError("failed to initialize HTTP transport");
     }
@@ -130,13 +138,11 @@ HttpResponse CurlTransport::send(const HttpRequest& request) {
     const CURLcode rc = curl_easy_perform(curl);
 
     if (writeCtx.exceeded || headerCtx.exceeded) {
-        curl_easy_cleanup(curl);
         throw ResponseTooLargeError("response exceeded the configured size limit for " + request.path);
     }
 
     if (rc != CURLE_OK) {
         const std::string message = curl_easy_strerror(rc);
-        curl_easy_cleanup(curl);
         if (rc == CURLE_OPERATION_TIMEDOUT) {
             throw TimeoutError("request to " + request.path + " timed out: " + message);
         }
@@ -148,7 +154,6 @@ HttpResponse CurlTransport::send(const HttpRequest& request) {
 
     long statusCode = 0;
     curl_easy_getinfo(curl, CURLINFO_RESPONSE_CODE, &statusCode);
-    curl_easy_cleanup(curl);
 
     HttpResponse response;
     response.statusCode = static_cast<int>(statusCode);

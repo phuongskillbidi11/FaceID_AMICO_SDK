@@ -1,6 +1,15 @@
 #include "JsonMapping.hpp"
+#include "../src/AccessLogLabels.hpp"
 
 namespace amico::backend {
+
+nlohmann::json toJson(const amico::Group& group) {
+    return {{"id", group.id}, {"name", group.name}};
+}
+
+nlohmann::json toJson(const amico::TimeZone& timeZone) {
+    return {{"id", timeZone.id}, {"name", timeZone.name}};
+}
 
 nlohmann::json toJson(const amico::AmicoUser& user) {
     nlohmann::json j;
@@ -19,6 +28,7 @@ nlohmann::json toJson(const amico::AmicoUser& user) {
     j["bioCount"] = user.bioCount;
     j["hasPassword"] = user.hasPassword;
     j["imageUrl"] = "/users/" + std::to_string(user.id) + "/image";
+    j["cpf"] = user.cpf.has_value() ? nlohmann::json(*user.cpf) : nlohmann::json(nullptr);
     return j;
 }
 
@@ -30,6 +40,20 @@ nlohmann::json toJson(const amico::AccessLogEntry& entry) {
     j["portalId"] = entry.portalId.has_value() ? nlohmann::json(*entry.portalId) : nlohmann::json(nullptr);
     j["logTypeId"] = entry.logTypeId;
     j["event"] = entry.event;
+    j["identifierId"] = entry.identifierId;
+    return j;
+}
+
+nlohmann::json toJson(const amico::AccessLogEntry& entry,
+                      const std::string& userName, const std::string& employeeId,
+                      const std::string& portalName, const std::string& timeZoneName) {
+    nlohmann::json j = toJson(entry);
+    j["userName"] = userName;
+    j["employeeId"] = employeeId;
+    j["portalName"] = portalName;
+    j["timeZoneName"] = timeZoneName;
+    j["authorizationLabel"] = amico::detail::authorizationLabel(entry.event);
+    j["identificationLabel"] = amico::detail::identificationLabel(entry.identifierId);
     return j;
 }
 
@@ -53,10 +77,27 @@ nlohmann::json toJson(const amico::SystemInformation& info) {
     return j;
 }
 
+nlohmann::json toJson(const amico::Visit& visit) {
+    nlohmann::json j;
+    j["id"] = visit.id;
+    j["visitorId"] = visit.visitorId;
+    j["hostId"] = visit.hostId;
+    j["visitorName"] = visit.visitorName;
+    j["hostName"] = visit.hostName;
+    j["beginTime"] = visit.beginTime;
+    j["endTime"] = visit.endTime;
+    j["finished"] = visit.finished;
+    j["cardCount"] = visit.cardCount;
+    return j;
+}
+
 amico::NewUser fromJsonNewUser(const nlohmann::json& body) {
     amico::NewUser user;
     user.name = body.at("name").get<std::string>();
     user.registration = body.at("registration").get<std::string>();
+    if (body.contains("cpf") && !body["cpf"].is_null()) {
+        user.cpf = body.at("cpf").get<std::string>();
+    }
     return user;
 }
 
@@ -68,6 +109,44 @@ amico::UserUpdate fromJsonUserUpdate(int64_t id, const nlohmann::json& body) {
     }
     if (body.contains("registration") && !body["registration"].is_null()) {
         update.registration = body.at("registration").get<std::string>();
+    }
+    if (body.contains("cpf") && !body["cpf"].is_null()) {
+        update.cpf = body.at("cpf").get<std::string>();
+    }
+    if (body.contains("beginTime") && !body["beginTime"].is_null()) {
+        update.beginTime = body.at("beginTime").get<int64_t>();
+    }
+    if (body.contains("endTime") && !body["endTime"].is_null()) {
+        update.endTime = body.at("endTime").get<int64_t>();
+    }
+    return update;
+}
+
+amico::NewVisit fromJsonNewVisit(const nlohmann::json& body) {
+    amico::NewVisit visit;
+    visit.visitorId = body.at("visitorId").get<int64_t>();
+    visit.hostId = body.at("hostId").get<int64_t>();
+    visit.beginTime = body.at("beginTime").get<int64_t>();
+    if (body.contains("endTime") && !body["endTime"].is_null()) {
+        visit.endTime = body.at("endTime").get<int64_t>();
+    }
+    return visit;
+}
+
+amico::VisitUpdate fromJsonVisitUpdate(int64_t id, const nlohmann::json& body) {
+    amico::VisitUpdate update;
+    update.id = id;
+    if (body.contains("visitorId") && !body["visitorId"].is_null()) {
+        update.visitorId = body.at("visitorId").get<int64_t>();
+    }
+    if (body.contains("hostId") && !body["hostId"].is_null()) {
+        update.hostId = body.at("hostId").get<int64_t>();
+    }
+    if (body.contains("beginTime") && !body["beginTime"].is_null()) {
+        update.beginTime = body.at("beginTime").get<int64_t>();
+    }
+    if (body.contains("endTime") && !body["endTime"].is_null()) {
+        update.endTime = body.at("endTime").get<int64_t>();
     }
     return update;
 }

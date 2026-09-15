@@ -247,6 +247,196 @@ TEST_CASE("DELETE /users/:id success returns 200") {
     CHECK(res->status == 200);
 }
 
+// ------------------------- Visitors (2026-09-14 plan) -------------------------
+
+TEST_CASE("R-1: GET /visitors filters by userTypeId = 1") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (body.value("object", std::string{}) == "users" && body.contains("where") && body["where"].is_array() &&
+            !body["where"].empty() && body["where"][0].value("object", std::string{}) == "user_types") {
+            CHECK(body["where"] == nlohmann::json::array({{{"field", "id"}, {"object", "user_types"}, {"value", 1}}}));
+        }
+        if (auto response = emptyUserProfileResponse(req)) return *response;
+        return FakeTransport::ok(readFixture("users_list_default_filter.json"));
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/visitors");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    CHECK(nlohmann::json::parse(res->body).is_array());
+}
+
+TEST_CASE("R-2: POST /visitors creates a user with user_type_id=1 and, when given, a c_users row") {
+    TestServer server;
+    bool sawUserTypeId = false, sawCUsers = false;
+    server.fake().responder = [&](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "users") {
+            CHECK(body["values"][0]["user_type_id"] == 1);
+            sawUserTypeId = true;
+            return FakeTransport::ok(readFixture("user_create_success.json"));
+        }
+        if (req.path == "/create_objects.fcgi" && body["object"] == "c_users") {
+            CHECK(body["values"][0]["cpf"] == "12345678900");
+            sawCUsers = true;
+            return FakeTransport::ok(R"({"ids":[1]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/visitors", R"({"name":"Test Visitor","registration":"V-001","cpf":"12345678900"})",
+                        "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(sawUserTypeId);
+    CHECK(sawCUsers);
+}
+
+TEST_CASE("R-3: DELETE /visitors/:id triggers the defensive c_users cleanup before the users delete") {
+    TestServer server;
+    std::vector<std::string> order;
+    server.fake().responder = [&](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        order.push_back(body["object"].get<std::string>());
+        if (body["object"] == "c_users") return FakeTransport::ok(R"({"changes": 0})");
+        return FakeTransport::ok(readFixture("user_delete_success.json"));
+    };
+    auto cli = server.http();
+    auto res = cli.Delete("/visitors/36");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    REQUIRE(order.size() == 2);
+    CHECK(order[0] == "c_users");
+    CHECK(order[1] == "users");
+}
+
+TEST_CASE("R-4: regression -- GET /users unaffected by the Visitors plan") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (body.value("object", std::string{}) == "users" && body.contains("where") && body["where"].is_array() &&
+            !body["where"].empty() && body["where"][0].contains("connector")) {
+            nlohmann::json expected = nlohmann::json::array({
+                {{"field", "user_type_id"}, {"operator", "="}, {"value", 0}, {"connector", "OR"}},
+                {{"field", "user_type_id"}, {"operator", "IS NULL"}, {"connector", ") AND ("}},
+            });
+            CHECK(body["where"] == expected);
+        }
+        if (auto response = emptyUserProfileResponse(req)) return *response;
+        return FakeTransport::ok(readFixture("users_list_default_filter.json"));
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/users");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+// ------------------------- Visits -------------------------
+
+TEST_CASE("S-1: GET /visits defaults to the finished != 1 filter") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (object == "visits") {
+            CHECK(body["where"] == nlohmann::json::array({{{"field", "finished"}, {"operator", "!="}, {"value", 1}}}));
+            return FakeTransport::ok(R"({"visits":[]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/visits");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    CHECK(nlohmann::json::parse(res->body).is_array());
+}
+
+TEST_CASE("S-2: POST /visits creates a visit and returns the new id") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "visits") {
+            CHECK(body["values"][0]["visitor_id"] == 56);
+            CHECK(body["values"][0]["host_id"] == 50);
+            return FakeTransport::ok(R"({"ids":[7]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/visits", R"({"visitorId":56,"hostId":50,"beginTime":100,"endTime":200})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 7);
+}
+
+TEST_CASE("S-3: PATCH /visits/:id never accepts a 'finished' key (no generic-update path)") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/modify_objects.fcgi" && body["object"] == "visits") {
+            CHECK_FALSE(body["values"].contains("finished"));
+            CHECK(body["values"]["begin_time"] == 111);
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/visits/7", R"({"beginTime":111,"finished":true})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("S-4: DELETE /visits/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/visits/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("S-5: POST /visits/:id/finish revokes the visitor's cards before the finish update, in order") {
+    TestServer server;
+    std::vector<std::string> order;
+    server.fake().responder = [&](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "visits") {
+            nlohmann::json rows = nlohmann::json::array({
+                {{"id", 7}, {"visitor_id", 56}, {"host_id", 50}, {"begin_time", 100}, {"end_time", 0}, {"finished", 0}},
+            });
+            return FakeTransport::ok(nlohmann::json{{"visits", rows}}.dump());
+        }
+        if (req.path == "/load_objects.fcgi" && object == "users") {
+            nlohmann::json rows = nlohmann::json::array();
+            for (const auto& id : body["where"]["users"]["id"]) {
+                rows.push_back({{"id", id}, {"name", "User"}, {"registration", "REG"}});
+            }
+            return FakeTransport::ok(nlohmann::json{{"users", rows}}.dump());
+        }
+        if (req.path == "/load_objects.fcgi" && object == "cards") {
+            return FakeTransport::ok(nlohmann::json{{"cards", nlohmann::json::array({{{"COUNT(*)", 0}}})}}.dump());
+        }
+        if (req.path == "/destroy_objects.fcgi" && object == "cards") {
+            order.push_back("destroy_cards");
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        if (req.path == "/modify_objects.fcgi" && object == "visits") {
+            order.push_back("modify_visits");
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/visits/7/finish", "", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    REQUIRE(order.size() == 2);
+    CHECK(order[0] == "destroy_cards");
+    CHECK(order[1] == "modify_visits");
+}
+
 // ------------------------- Groups / Cards -------------------------
 
 TEST_CASE("POST /users/:id/groups/:groupId success returns 200") {
@@ -422,15 +612,218 @@ TEST_CASE("PUT /users/:id/password with the confirmation header succeeds") {
 
 // ------------------------- Access logs -------------------------
 
-TEST_CASE("GET /access-logs lists entries") {
+namespace {
+
+/// Dispatches every /load_objects.fcgi call GET /access-logs now makes
+/// (list, count, users-by-ids, portals, the 2-hop time-zone join) based
+/// on the request body's "object" field. `accessLogsList` and
+/// `accessLogsTotal` are test-specific; the join fixtures (one user,
+/// one portal, one fully-resolved time zone, matching access_log id
+/// 211 only -- id 209 deliberately has no access_log_access_rules row,
+/// exercising the "unresolved join -> absent, not empty-string at the
+/// SDK layer" path) are shared across R-1/R-2/R-3.
+HttpResponse dispatchAccessLogsBackendRequest(const HttpRequest& req, const nlohmann::json& accessLogsList,
+                                               int64_t accessLogsTotal) {
+    nlohmann::json body = nlohmann::json::parse(req.body);
+    std::string object = body.value("object", "");
+    if (object == "access_logs") {
+        if (body["fields"] == nlohmann::json::array({"COUNT(*)"})) {
+            return FakeTransport::ok(nlohmann::json{{"access_logs", nlohmann::json::array({
+                nlohmann::json{{"COUNT(*)", accessLogsTotal}}
+            })}}.dump());
+        }
+        return FakeTransport::ok(nlohmann::json{{"access_logs", accessLogsList}}.dump());
+    }
+    if (object == "users") {
+        return FakeTransport::ok(nlohmann::json{{"users", nlohmann::json::array({
+            nlohmann::json{{"id", 36}, {"name", "Test User B"}, {"registration", "EMP-036"}}
+        })}}.dump());
+    }
+    if (object == "portals") {
+        return FakeTransport::ok(nlohmann::json{{"portals", nlohmann::json::array({
+            nlohmann::json{{"id", 1}, {"name", "Portal"}}
+        })}}.dump());
+    }
+    if (object == "access_log_access_rules") {
+        return FakeTransport::ok(nlohmann::json{{"access_log_access_rules", nlohmann::json::array({
+            nlohmann::json{{"access_log_id", 211}, {"access_rule_id", 1}}
+            // id 209 deliberately has no row here.
+        })}}.dump());
+    }
+    if (object == "access_rule_time_zones") {
+        return FakeTransport::ok(nlohmann::json{{"access_rule_time_zones", nlohmann::json::array({
+            nlohmann::json{{"access_rule_id", 1}, {"time_zone_id", 1}}
+        })}}.dump());
+    }
+    if (object == "time_zones") {
+        return FakeTransport::ok(nlohmann::json{{"time_zones", nlohmann::json::array({
+            nlohmann::json{{"id", 1}, {"name", "Always Allowed"}}
+        })}}.dump());
+    }
+    return FakeTransport::status(500, R"({"error":"unexpected object in test responder"})");
+}
+
+const nlohmann::json kTwoAccessLogRows = nlohmann::json::array({
+    nlohmann::json{{"id", 211}, {"time", 1789153178}, {"user_id", 36}, {"portal_id", 1},
+                   {"log_type_id", -1}, {"event", 7}, {"identifier_id", 1717658368}},
+    nlohmann::json{{"id", 209}, {"time", 1789150000}, {"user_id", nullptr}, {"portal_id", nullptr},
+                   {"log_type_id", -1}, {"event", 3}, {"identifier_id", 1717658368}}
+});
+
+}  // namespace
+
+TEST_CASE("R-1: GET /access-logs accepts offset, returns {entries, total}") {
     TestServer server;
-    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(readFixture("access_logs_list.json")); };
+    server.fake().responder = [](const HttpRequest& req) {
+        return dispatchAccessLogsBackendRequest(req, kTwoAccessLogRows, 5);
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/access-logs?limit=2&offset=2");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    REQUIRE(body.is_object());
+    CHECK(body["total"] == 5);
+    REQUIRE(body["entries"].is_array());
+    CHECK(body["entries"].size() == 2);
+}
+
+TEST_CASE("GET /groups and /timezones expose name-only lists, including empty lists") {
+    for (const auto& route : {std::string("groups"), std::string("timezones")}) {
+        const auto object = route == "groups" ? "groups" : "time_zones";
+        for (const bool empty : {false, true}) {
+            CAPTURE(route); CAPTURE(empty);
+            TestServer server;
+            const auto rows = empty ? nlohmann::json::array() : nlohmann::json::array({
+                {{"id", 1}, {"name", "Staff"}}, {{"id", 2}, {"name", "Visitors"}}
+            });
+            int calls = 0;
+            server.fake().responder = [&](const HttpRequest& req) {
+                ++calls;
+                CHECK(req.path == "/load_objects.fcgi");
+                const nlohmann::json expected = {{"object", object}, {"fields", {"id", "name"}}};
+                CHECK(nlohmann::json::parse(req.body) == expected);
+                return FakeTransport::ok(nlohmann::json{{object, rows}}.dump());
+            };
+            auto cli = server.http();
+            auto res = cli.Get("/" + route);
+            REQUIRE(res != nullptr); CHECK(res->status == 200);
+            const nlohmann::json expected = {{route, rows}};
+            CHECK(nlohmann::json::parse(res->body) == expected);
+            CHECK(calls == 1);
+        }
+    }
+}
+
+TEST_CASE("Report lookup routes require a session before any SDK request") {
+    TestServer server(false); server.responder = failIfCalled;
+    auto cli = server.http(false);
+    for (const auto* path : {"/groups", "/timezones", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
+        auto res = cli.Get(path);
+        REQUIRE(res != nullptr); CHECK(res->status == 401);
+    }
+    CHECK(server.factoryCalls == 0);
+}
+
+TEST_CASE("Access log route forwards individual and combined repeated/comma-separated filters to list and count") {
+    const std::vector<std::pair<std::string, std::string>> cases = {
+        {"userIds=36,50&userIds=70", R"({"access_logs":{},"users":{"id":[36,50,70]}})"},
+        {"groupIds=1&groupIds=2,3", R"({"access_logs":{},"groups":{"id":[1,2,3]}})"},
+        {"timeZoneIds=4,5&timeZoneIds=6", R"({"access_logs":{},"time_zones":{"id":[4,5,6]}})"},
+        {"userIds=36,50&groupIds=1&timeZoneIds=2", R"({"access_logs":{},"users":{"id":[36,50]},"groups":{"id":[1]},"time_zones":{"id":[2]}})"},
+        {"userIds=36&groupIds=1&timeZoneIds=2&from=100&to=200", R"({"access_logs":{"time":{">=":100,"<=":200}},"users":{"id":[36]},"groups":{"id":[1]},"time_zones":{"id":[2]}})"},
+        {"userIds=9223372036854775807&groupIds=&timeZoneIds=", R"({"access_logs":{},"users":{"id":[9223372036854775807]}})"},
+        {"userIds=,36,,&userIds=&groupIds=", R"({"access_logs":{},"users":{"id":[36]}})"},
+        {"", "[]"},
+        {"userIds=&groupIds=,,&timeZoneIds=", "[]"},
+        {"from=100&to=200", R"([{"field":"time","operator":">=","value":100},{"field":"time","operator":"<=","value":200}])"},
+        {"from=100&to=200&userIds=&groupIds=&timeZoneIds=", R"([{"field":"time","operator":">=","value":100},{"field":"time","operator":"<=","value":200}])"}
+    };
+    for (const auto& item : cases) {
+        CAPTURE(item.first);
+        TestServer server; int lists = 0, counts = 0;
+        server.fake().responder = [&](const HttpRequest& req) {
+            const auto body = nlohmann::json::parse(req.body);
+            if (body["object"] == "access_logs") {
+                CHECK(body["where"].dump() == nlohmann::json::parse(item.second).dump());
+                if (body["fields"] == nlohmann::json::array({"COUNT(*)"})) {
+                    ++counts;
+                    CHECK_FALSE(body.contains("limit")); CHECK_FALSE(body.contains("offset"));
+                } else {
+                    ++lists; CHECK(body["limit"] == 2); CHECK(body["offset"] == 2);
+                }
+            }
+            return dispatchAccessLogsBackendRequest(req, kTwoAccessLogRows, 5);
+        };
+        auto cli = server.http();
+        auto res = cli.Get("/access-logs?limit=2&offset=2&" + item.first);
+        REQUIRE(res != nullptr); CHECK(res->status == 200);
+        const auto body = nlohmann::json::parse(res->body);
+        CHECK(body["entries"].size() == 2); CHECK(body["total"] == 5);
+        CHECK(lists == 1); CHECK(counts == 1);
+    }
+}
+
+TEST_CASE("Access log route rejects malformed and overflowing filter IDs before device calls") {
+    TestServer server; server.fake().responder = failIfCalled;
+    auto cli = server.http();
+    for (const auto* key : {"userIds", "groupIds", "timeZoneIds"}) {
+        for (const auto* value : {"bad", "1x", "1.5", "1,bad", "9223372036854775808", "-9223372036854775809"}) {
+            CAPTURE(key); CAPTURE(value);
+            auto res = cli.Get(std::string("/access-logs?") + key + "=" + value);
+            REQUIRE(res != nullptr); CHECK(res->status == 400);
+        }
+    }
+}
+
+TEST_CASE("R-2: GET /access-logs enrichment fields present and correct, including the time-zone join") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        return dispatchAccessLogsBackendRequest(req, kTwoAccessLogRows, 2);
+    };
     auto cli = server.http();
     auto res = cli.Get("/access-logs");
     REQUIRE(res != nullptr);
     CHECK(res->status == 200);
     nlohmann::json body = nlohmann::json::parse(res->body);
-    CHECK(body.is_array());
+    nlohmann::json entries = body["entries"];
+    REQUIRE(entries.size() == 2);
+
+    nlohmann::json resolved = entries[0];
+    CHECK(resolved["id"] == 211);
+    CHECK(resolved["userName"] == "Test User B");
+    CHECK(resolved["employeeId"] == "EMP-036");
+    CHECK(resolved["portalName"] == "Portal");
+    CHECK(resolved["timeZoneName"] == "Always Allowed");
+    CHECK(resolved["authorizationLabel"] == "Granted");
+    CHECK(resolved["identificationLabel"] == "Facial");
+
+    nlohmann::json unresolved = entries[1];
+    CHECK(unresolved["id"] == 209);
+    CHECK(unresolved["userName"] == "");
+    CHECK(unresolved["employeeId"] == "");
+    CHECK(unresolved["portalName"] == "");
+    CHECK(unresolved["timeZoneName"] == "");  // no access_log_access_rules row for id 209
+    CHECK(unresolved["authorizationLabel"] == "Not recognized");
+}
+
+TEST_CASE("R-3: from+to narrows both entries and total consistently") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json parsed = nlohmann::json::parse(req.body);
+        if (parsed.value("object", "") == "access_logs" && parsed["fields"] != nlohmann::json::array({"COUNT(*)"})) {
+            REQUIRE(parsed["where"].size() == 2);  // both from and to present
+        }
+        // Narrowed window: only the first row (211) is "in range"; total must match.
+        return dispatchAccessLogsBackendRequest(req, nlohmann::json::array({kTwoAccessLogRows[0]}), 1);
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/access-logs?from=1789150000&to=1789160000");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    CHECK(body["total"] == 1);
+    CHECK(body["entries"].size() == 1);
 }
 
 // ---------------- ErrorMapping status codes (Decision 6) ----------------

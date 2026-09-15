@@ -1,8 +1,11 @@
 #pragma once
 
 #include <cstdint>
+#include <map>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
 #include <vector>
 
 #include "amico/Config.hpp"
@@ -66,6 +69,14 @@ public:
     public:
         std::vector<AmicoUser> list(const UserQuery& query = {});
         std::optional<AmicoUser> get(int64_t id);
+
+        /// Batch name/registration lookup for a set of user ids --
+        /// deliberately lighter than list()/get() (no groupIds/
+        /// cardCount/faceCount/etc. enrichment, which would be N+1
+        /// queries per id for data the access-logs join doesn't need).
+        /// An id absent from the device is simply absent from the
+        /// returned map. Value is {name, registration}.
+        std::map<int64_t, std::pair<std::string, std::string>> getNamesByIds(const std::vector<int64_t>& ids);
 
         /// POST /create_objects.fcgi. Returns the device-assigned user id.
         int64_t create(const NewUser& user);
@@ -140,6 +151,20 @@ public:
     class AccessLogsApi {
     public:
         std::vector<AccessLogEntry> list(const AccessLogQuery& query = {});
+        int64_t accessLogsCount(const AccessLogQuery& query = {});
+
+        /// Resolves each given access_log id's time-zone name via the
+        /// real 2-hop join (`access_logs` has no direct `time_zone_id`
+        /// -- LIVE-CAPTURED schema, spec.md Decision 2b). An id is
+        /// absent from the returned map if it has no matching
+        /// `access_log_access_rules` row, or that row's access_rule has
+        /// no matching `access_rule_time_zones` row (not present with
+        /// an empty string -- the caller decides how to render "no
+        /// time zone"). If more than one row exists at either hop
+        /// (both junction tables are logically many-to-many), the
+        /// first row returned by the device is used -- a deterministic,
+        /// documented tie-break, not an arbitrary pick.
+        std::map<int64_t, std::string> timeZoneNamesForAccessLogIds(const std::vector<int64_t>& accessLogIds);
 
     private:
         friend class AmicoClient;
@@ -147,8 +172,88 @@ public:
         AmicoClient* owner_;
     };
 
+    /// Typed wrapper over the internal load_objects.fcgi query engine for
+    /// the `portals` object.
+    class PortalsApi {
+    public:
+        std::vector<Portal> list();
+
+    private:
+        friend class AmicoClient;
+        explicit PortalsApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
+    /// Typed wrapper over the internal load_objects.fcgi query engine for
+    /// the `groups` object.
+    class GroupsApi {
+    public:
+        std::vector<Group> list();
+
+    private:
+        friend class AmicoClient;
+        explicit GroupsApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
+    /// Typed wrapper over the internal load_objects.fcgi query engine for
+    /// the `time_zones` object.
+    class TimeZonesApi {
+    public:
+        std::vector<TimeZone> list();
+
+    private:
+        friend class AmicoClient;
+        explicit TimeZonesApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
+    /// Typed read/write wrapper for the `visits` object (Visits plan,
+    /// 2026-09-14). A visit's Cards are the visitor's own `cards` rows --
+    /// use UsersApi::addCard()/removeCard() with the visit's visitorId,
+    /// not a method on this class
+    /// (.plans/2026-09-14-implement-visits-enroll-visits-crud/spec.md
+    /// Decision 3).
+    class VisitsApi {
+    public:
+        std::vector<Visit> list(const VisitQuery& query = {});
+        std::optional<Visit> get(int64_t id);
+
+        /// POST /create_objects.fcgi. Returns the device-assigned visit id.
+        int64_t create(const NewVisit& visit);
+
+        /// POST /modify_objects.fcgi. Throws ProtocolError if no visit changed.
+        void update(const VisitUpdate& visit);
+
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if no visit
+        /// removed. Does NOT revoke the visitor's cards (spec.md Risks).
+        void remove(int64_t id);
+
+        /// Marks a visit concluded: revokes every card currently issued to
+        /// its visitor, then sets finished=1/end_time=now on the visit
+        /// itself (spec.md Decision 4 -- mirrors the real device's own
+        /// two-step save() side effect). Throws ProtocolError if the
+        /// visit doesn't exist -- this codebase has no dedicated
+        /// "not found" exception type; every other not-found case here
+        /// (e.g. a 404 on image reads) already uses either HttpError or
+        /// ProtocolError depending on the underlying HTTP shape, and a
+        /// missing visit surfaces via a `visits: []` load_objects
+        /// response, matching ProtocolError's existing usage for
+        /// unexpected/empty response shapes.
+        void finish(int64_t id);
+
+    private:
+        friend class AmicoClient;
+        explicit VisitsApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
     UsersApi& users() { return usersApi_; }
     AccessLogsApi& accessLogs() { return accessLogsApi_; }
+    PortalsApi& portals() { return portalsApi_; }
+    GroupsApi& groups() { return groupsApi_; }
+    TimeZonesApi& timeZones() { return timeZonesApi_; }
+    VisitsApi& visits() { return visitsApi_; }
 
     /// Development/discovery use only -- returns the raw ~73KB object
     /// schema from POST /object_metadata.fcgi. Not part of the normal
@@ -158,6 +263,10 @@ public:
 private:
     friend class UsersApi;
     friend class AccessLogsApi;
+    friend class PortalsApi;
+    friend class GroupsApi;
+    friend class TimeZonesApi;
+    friend class VisitsApi;
 
     /// Test-only seam: swaps the internal transport for a fake one so
     /// offline tests never touch a real socket. Declared here (not in a
@@ -169,6 +278,7 @@ private:
 
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);
     std::optional<AmicoUser> getUserImpl(int64_t id);
+    std::map<int64_t, std::pair<std::string, std::string>> getUserNamesByIdsImpl(const std::vector<int64_t>& ids);
     int64_t createUserImpl(const NewUser& user);
     void updateUserImpl(const UserUpdate& user);
     void removeUserImpl(int64_t id);
@@ -182,12 +292,27 @@ private:
     void removeUserImageImpl(int64_t userId);
     void setUserPasswordImpl(int64_t userId, const std::string& plaintextPassword);
     std::vector<AccessLogEntry> listAccessLogsImpl(const AccessLogQuery& query);
+    int64_t accessLogsCountImpl(const AccessLogQuery& query);
+    std::vector<Portal> listPortalsImpl();
+    std::vector<Group> listGroupsImpl();
+    std::vector<TimeZone> listTimeZonesImpl();
+    std::map<int64_t, std::string> timeZoneNamesForAccessLogIdsImpl(const std::vector<int64_t>& accessLogIds);
+    std::vector<Visit> listVisitsImpl(const VisitQuery& query);
+    std::optional<Visit> getVisitImpl(int64_t id);
+    int64_t createVisitImpl(const NewVisit& visit);
+    void updateVisitImpl(const VisitUpdate& visit);
+    void removeVisitImpl(int64_t id);
+    void finishVisitImpl(int64_t id);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
 
     UsersApi usersApi_;
     AccessLogsApi accessLogsApi_;
+    PortalsApi portalsApi_{this};
+    GroupsApi groupsApi_{this};
+    TimeZonesApi timeZonesApi_{this};
+    VisitsApi visitsApi_{this};
 };
 
 /// See AmicoClient's friend declaration above. Defined in src/Client.cpp;

@@ -1,5 +1,7 @@
 #include "Routes.hpp"
 
+#include <map>
+#include <set>
 #include <stdexcept>
 #include <string>
 #include <vector>
@@ -71,6 +73,31 @@ int queryParamInt(const httplib::Request& req, const std::string& name, int fall
         throw std::invalid_argument("query parameter '" + name + "' is not a valid integer: '" + raw + "'");
     }
     return value;
+}
+
+std::optional<std::vector<int64_t>> queryParamIds(const httplib::Request& req, const std::string& name) {
+    std::vector<int64_t> ids;
+    const auto range = req.params.equal_range(name);
+    for (auto it = range.first; it != range.second; ++it) {
+        const auto& raw = it->second;
+        std::size_t start = 0;
+        while (start < raw.size()) {
+            const auto end = raw.find(',', start);
+            const auto token = raw.substr(start, end == std::string::npos ? end : end - start);
+            if (!token.empty()) {
+                std::size_t consumed = 0;
+                const auto id = std::stoll(token, &consumed);
+                if (consumed != token.size()) {
+                    throw std::invalid_argument("query parameter '" + name + "' contains an invalid integer");
+                }
+                ids.push_back(static_cast<int64_t>(id));
+            }
+            if (end == std::string::npos) break;
+            start = end + 1;
+        }
+    }
+    if (ids.empty()) return std::nullopt;
+    return ids;
 }
 
 }  // namespace
@@ -457,6 +484,442 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // ------------------------- Visitors -------------------------
+    // Same underlying `users` object as /users/*, filtered to
+    // userTypeId=1 -- LIVE-CONFIRMED shape, see
+    // .plans/2026-09-14-implement-visitors-enroll-visitors-list-/spec.md.
+
+    svr.Get("/visitors", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::UserQuery query;
+        query.userTypeId = 1;
+        try {
+            query.limit = queryParamInt(req, "limit", 0);
+            query.offset = queryParamInt(req, "offset", 0);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& user : client.users().list(query)) {
+                arr.push_back(toJson(user));
+            }
+            res.set_content(arr.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Get(R"(/visitors/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            auto user = client.users().get(id);
+            if (!user.has_value()) {
+                res.status = 404;
+                res.set_content(nlohmann::json{{"error", "user not found"}, {"type", "NotFound"}}.dump(),
+                                 "application/json");
+                return;
+            }
+            res.set_content(toJson(*user).dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post("/visitors", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewUser newUser;
+        try {
+            newUser = fromJsonNewUser(nlohmann::json::parse(req.body));
+            newUser.userTypeId = 1;
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.users().create(newUser);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Patch(R"(/visitors/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::UserUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonUserUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.users().update(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/visitors/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.users().remove(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post(R"(/visitors/(\d+)/groups/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0, groupId = 0;
+        try {
+            userId = std::stoll(req.matches[1]);
+            groupId = std::stoll(req.matches[2]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.users().addToGroup(userId, groupId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/visitors/(\d+)/groups/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0, groupId = 0;
+        try {
+            userId = std::stoll(req.matches[1]);
+            groupId = std::stoll(req.matches[2]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.users().removeFromGroup(userId, groupId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post(R"(/visitors/(\d+)/cards)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0, areaCode = 0, cardNumber = 0;
+        try {
+            userId = std::stoll(req.matches[1]);
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            areaCode = body.at("areaCode").get<int64_t>();
+            cardNumber = body.at("cardNumber").get<int64_t>();
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t cardId = client.users().addCard(userId, areaCode, cardNumber);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"cardId", cardId}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    // Capture malformed IDs too so they receive InvalidRequest after the cookie gate.
+    svr.Get(R"(/visitors/([^/]+)/image)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0;
+        try {
+            const std::string raw = req.matches[1];
+            if (raw.find_first_not_of("0123456789") != std::string::npos) {
+                throw std::invalid_argument("user id must contain only decimal digits");
+            }
+            userId = std::stoll(raw);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            const auto image = client.users().getImage(userId);
+            res.set_content(std::string(image.bytes.begin(), image.bytes.end()), image.contentType);
+        } catch (const amico::HttpError& e) {
+            if (e.statusCode() == 404) {
+                res.status = 404;
+                res.body.clear();
+            } else {
+                respondError(res, e);
+            }
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Put(R"(/visitors/(\d+)/image)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0;
+        try {
+            userId = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        std::vector<uint8_t> bytes(req.body.begin(), req.body.end());
+        try {
+            client.users().setImage(userId, bytes);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/visitors/(\d+)/image)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0;
+        try {
+            userId = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.users().removeImage(userId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    // Password is never logged: `plaintextPassword` only ever lives in
+    // this handler's local variable and inside AmicoClient::setPassword()'s
+    // own call frame (which itself never logs it -- see Client.hpp).
+    svr.Put(R"(/visitors/(\d+)/password)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t userId = 0;
+        std::string password;
+        try {
+            userId = std::stoll(req.matches[1]);
+            password = nlohmann::json::parse(req.body).at("password").get<std::string>();
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        if (!requireConfirmationHeader(req, res)) {
+            return;
+        }
+        try {
+            client.users().setPassword(userId, password);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    // `visits` object -- a genuinely distinct device object from
+    // `users`/`visitors` (its own PK/fields), unlike Visitors. See
+    // .plans/2026-09-14-implement-visits-enroll-visits-crud/spec.md.
+    // A visit's Cards tab reuses /visitors/:id/cards above (keyed by
+    // the visit's own visitorId) -- there is no /visits/:id/cards route
+    // (spec.md Decision 3).
+
+    svr.Get("/visits", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::VisitQuery query;
+        try {
+            query.limit = queryParamInt(req, "limit", 0);
+            query.offset = queryParamInt(req, "offset", 0);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            nlohmann::json arr = nlohmann::json::array();
+            for (const auto& visit : client.visits().list(query)) {
+                arr.push_back(toJson(visit));
+            }
+            res.set_content(arr.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Get(R"(/visits/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            auto visit = client.visits().get(id);
+            if (!visit.has_value()) {
+                res.status = 404;
+                res.set_content(nlohmann::json{{"error", "visit not found"}, {"type", "NotFound"}}.dump(),
+                                 "application/json");
+                return;
+            }
+            res.set_content(toJson(*visit).dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post("/visits", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewVisit newVisit;
+        try {
+            newVisit = fromJsonNewVisit(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.visits().create(newVisit);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Patch(R"(/visits/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::VisitUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonVisitUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.visits().update(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/visits/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.visits().remove(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    // Real device-side write side effect: revokes every card currently
+    // issued to this visit's visitor (spec.md Decision 4/Background).
+    // No confirmation header -- matches this project's existing
+    // card-removal precedent (DELETE /cards/:id), not the
+    // credential/firmware/license tier that does require one.
+    svr.Post(R"(/visits/(\d+)/finish)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.visits().finish(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Get("/groups", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& group : client.groups().list()) rows.push_back(toJson(group));
+            res.set_content(nlohmann::json{{"groups", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+    svr.Get("/timezones", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& group : client.timeZones().list()) rows.push_back(toJson(group));
+            res.set_content(nlohmann::json{{"timezones", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
     svr.Get("/access-logs", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;
@@ -469,17 +932,62 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
             if (req.has_param("to")) {
                 query.to = std::stoll(req.get_param_value("to"));
             }
+            query.userIds = queryParamIds(req, "userIds");
+            query.groupIds = queryParamIds(req, "groupIds");
+            query.timeZoneIds = queryParamIds(req, "timeZoneIds");
             query.limit = queryParamInt(req, "limit", 0);
+            query.offset = queryParamInt(req, "offset", 0);
         } catch (const std::exception& e) {
             respondInvalidRequest(res, e.what());
             return;
         }
         try {
-            nlohmann::json arr = nlohmann::json::array();
-            for (const auto& entry : client.accessLogs().list(query)) {
-                arr.push_back(toJson(entry));
+            std::vector<amico::AccessLogEntry> entries = client.accessLogs().list(query);
+            int64_t total = client.accessLogs().accessLogsCount(query);
+
+            std::set<int64_t> userIdSet;
+            std::set<int64_t> portalIdSet;
+            std::vector<int64_t> accessLogIds;
+            accessLogIds.reserve(entries.size());
+            for (const auto& entry : entries) {
+                if (entry.userId.has_value()) userIdSet.insert(*entry.userId);
+                if (entry.portalId.has_value()) portalIdSet.insert(*entry.portalId);
+                accessLogIds.push_back(entry.id);
             }
-            res.set_content(arr.dump(), "application/json");
+            std::vector<int64_t> userIds(userIdSet.begin(), userIdSet.end());
+
+            auto userNames = client.users().getNamesByIds(userIds);
+            std::map<int64_t, std::string> portalNames;
+            for (const auto& portal : client.portals().list()) {
+                portalNames[portal.id] = portal.name;
+            }
+            auto timeZoneNames = client.accessLogs().timeZoneNamesForAccessLogIds(accessLogIds);
+
+            nlohmann::json entriesJson = nlohmann::json::array();
+            for (const auto& entry : entries) {
+                std::string userName, employeeId, portalName, timeZoneName;
+                if (entry.userId.has_value()) {
+                    auto it = userNames.find(*entry.userId);
+                    if (it != userNames.end()) {
+                        userName = it->second.first;
+                        employeeId = it->second.second;
+                    }
+                }
+                if (entry.portalId.has_value()) {
+                    auto it = portalNames.find(*entry.portalId);
+                    if (it != portalNames.end()) {
+                        portalName = it->second;
+                    }
+                }
+                auto tzIt = timeZoneNames.find(entry.id);
+                if (tzIt != timeZoneNames.end()) {
+                    timeZoneName = tzIt->second;
+                }
+                entriesJson.push_back(toJson(entry, userName, employeeId, portalName, timeZoneName));
+            }
+
+            nlohmann::json responseBody = {{"entries", entriesJson}, {"total", total}};
+            res.set_content(responseBody.dump(), "application/json");
         } catch (const std::exception& e) {
             respondError(res, e);
         }

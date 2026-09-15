@@ -1,0 +1,14 @@
+role: executor
+plan: 2026-09-14-implement-visitors-enroll-visitors-list-
+generated_at: 2026-09-13T19:38:55Z
+request: "The real AMICO device's sidebar has a dedicated **Visitors** page\n(`Enroll → Visitors`, `customusers.html?type=1`) alongside Users. This\nproject implements it: a new `/visitors` area in our own frontend and\nbackend, with the same CRUD capabilities Users already has (list,\nadd, edit, remove — including groups/cards/PIN/face), plus one\nvisitor-specific field the real device's own Add/Edit form shows:\n**CPF** (a text field, currently disabled until save, same as\nLast Access).\n\n**Done looks like:** A new \"Visitors\" sidebar tab, listing/adding/\nediting/removing visitor records exactly like Users does today, with\nan additional CPF field on the General tab.\n\n---"
+current_task_present: false
+skills:
+  - karpathy-guidelines: "explicitly enabled"
+  - siemens-s7: "matched request text"
+  - esp32: "matched request text"
+  - reverse-engineering: "matched request text"
+  - qt: "matched request text"
+  - plc: "required by automation/siemens-s7"
+  - cpp: "required by software/qt"
+tools:

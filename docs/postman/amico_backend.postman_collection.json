@@ -1,0 +1,279 @@
+{
+  "info": {
+    "name": "AMICO Backend API",
+    "description": "amico_backend.exe must be running (see docs/backend-api.md). No WebSocket/SSE realtime channel exists today -- everything here is plain request/response. Run 'Login' first; Postman's cookie manager stores the amico_session cookie automatically for every later request in this collection (same as a browser).",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:8080" },
+    { "key": "deviceUrl", "value": "http://192.168.2.156" },
+    { "key": "deviceUser", "value": "Admin" },
+    { "key": "devicePassword", "value": "YOUR_DEVICE_PASSWORD_HERE" },
+    { "key": "userId", "value": "1" },
+    { "key": "groupId", "value": "1" },
+    { "key": "cardId", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"deviceUrl\": \"{{deviceUrl}}\",\n  \"username\": \"{{deviceUser}}\",\n  \"password\": \"{{devicePassword}}\"\n}" },
+            "url": { "raw": "{{baseUrl}}/login", "host": ["{{baseUrl}}"], "path": ["login"] },
+            "description": "Sets the amico_session cookie Postman will send automatically on every later request."
+          }
+        },
+        {
+          "name": "Session status",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/session", "host": ["{{baseUrl}}"], "path": ["session"] } }
+        },
+        {
+          "name": "Health (device reachable?)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/health", "host": ["{{baseUrl}}"], "path": ["health"] } }
+        },
+        {
+          "name": "Logout",
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/logout", "host": ["{{baseUrl}}"], "path": ["logout"] } }
+        }
+      ]
+    },
+    {
+      "name": "System",
+      "item": [
+        {
+          "name": "System information",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/system-information", "host": ["{{baseUrl}}"], "path": ["system-information"] } }
+        }
+      ]
+    },
+    {
+      "name": "Users",
+      "item": [
+        {
+          "name": "List users",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users?limit=50&offset=0", "host": ["{{baseUrl}}"], "path": ["users"], "query": [{ "key": "limit", "value": "50" }, { "key": "offset", "value": "0" }] } }
+        },
+        {
+          "name": "Get user",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
+        },
+        {
+          "name": "Create user",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"ZZ_PostmanTest\",\n  \"registration\": \"\"\n}" },
+            "url": { "raw": "{{baseUrl}}/users", "host": ["{{baseUrl}}"], "path": ["users"] },
+            "description": "Creates a REAL user on the real device. Delete it afterward with 'Delete user'."
+          }
+        },
+        {
+          "name": "Update user (name/registration/beginTime/endTime)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"ZZ_PostmanTest\",\n  \"beginTime\": 1789347600,\n  \"endTime\": 1789513200\n}" },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] },
+            "description": "All fields optional; send only what you want to change. beginTime/endTime are unix epoch seconds -- there is no confirmed way to clear one back to unset, send 0 explicitly if needed (unconfirmed but works in practice)."
+          }
+        },
+        {
+          "name": "Delete user",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/users/{{userId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}"] } }
+        },
+        {
+          "name": "Add user to group",
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/users/{{userId}}/groups/{{groupId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "groups", "{{groupId}}"] } }
+        },
+        {
+          "name": "Remove user from group",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/users/{{userId}}/groups/{{groupId}}", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "groups", "{{groupId}}"] } }
+        },
+        {
+          "name": "Add card",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"areaCode\": 1,\n  \"cardNumber\": 12345\n}" },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/cards", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "cards"] }
+          }
+        },
+        {
+          "name": "Remove card",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/cards/{{cardId}}", "host": ["{{baseUrl}}"], "path": ["cards", "{{cardId}}"] } }
+        },
+        {
+          "name": "Set administrator (sensitive)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Confirm-Sensitive-Action", "value": "yes" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"isAdmin\": true\n}" },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/administrator", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "administrator"] },
+            "description": "Requires X-Confirm-Sensitive-Action: yes, or 428 Precondition Required."
+          }
+        },
+        {
+          "name": "Set password/PIN (sensitive)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Confirm-Sensitive-Action", "value": "yes" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"password\": \"1234\"\n}" },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/password", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "password"] },
+            "description": "No route ever reads this back -- structural, not a missing feature."
+          }
+        },
+        {
+          "name": "Get face image",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/users/{{userId}}/image", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "image"] } }
+        },
+        {
+          "name": "Upload face image",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "image/jpeg" }],
+            "body": { "mode": "file", "file": {} },
+            "url": { "raw": "{{baseUrl}}/users/{{userId}}/image", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "image"] },
+            "description": "Pick a JPEG file in Postman's Body > binary picker. This enrolls/updates the face-recognition template, not just a cosmetic photo."
+          }
+        },
+        {
+          "name": "Remove face image",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/users/{{userId}}/image", "host": ["{{baseUrl}}"], "path": ["users", "{{userId}}", "image"] } }
+        }
+      ]
+    },
+    {
+      "name": "Visitors",
+      "item": [
+        {
+          "name": "List visitors",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/visitors?limit=50&offset=0", "host": ["{{baseUrl}}"], "path": ["visitors"], "query": [{ "key": "limit", "value": "50" }, { "key": "offset", "value": "0" }] } }
+        },
+        {
+          "name": "Get visitor",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/visitors/{{userId}}", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}"] } }
+        },
+        {
+          "name": "Create visitor (with CPF)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"name\": \"ZZ_PostmanVisitor\",\n  \"registration\": \"\",\n  \"cpf\": \"12345678900\"\n}" },
+            "url": { "raw": "{{baseUrl}}/visitors", "host": ["{{baseUrl}}"], "path": ["visitors"] },
+            "description": "userTypeId is set to 1 by the route itself -- never send it in the body."
+          }
+        },
+        {
+          "name": "Update visitor",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"cpf\": \"12345678900\"\n}" },
+            "url": { "raw": "{{baseUrl}}/visitors/{{userId}}", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}"] }
+          }
+        },
+        {
+          "name": "Delete visitor",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/visitors/{{userId}}", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}"] } }
+        },
+        {
+          "name": "Add visitor to group",
+          "request": { "method": "POST", "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/groups/{{groupId}}", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "groups", "{{groupId}}"] } }
+        },
+        {
+          "name": "Remove visitor from group",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/groups/{{groupId}}", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "groups", "{{groupId}}"] } }
+        },
+        {
+          "name": "Add visitor card",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"areaCode\": 1,\n  \"cardNumber\": 12345\n}" },
+            "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/cards", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "cards"] }
+          }
+        },
+        {
+          "name": "Get visitor face image",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/image", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "image"] } }
+        },
+        {
+          "name": "Upload visitor face image",
+          "request": {
+            "method": "PUT",
+            "header": [{ "key": "Content-Type", "value": "image/jpeg" }],
+            "body": { "mode": "file", "file": {} },
+            "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/image", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "image"] }
+          }
+        },
+        {
+          "name": "Remove visitor face image",
+          "request": { "method": "DELETE", "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/image", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "image"] } }
+        },
+        {
+          "name": "Set visitor password/PIN (sensitive)",
+          "request": {
+            "method": "PUT",
+            "header": [
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "X-Confirm-Sensitive-Action", "value": "yes" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"password\": \"1234\"\n}" },
+            "url": { "raw": "{{baseUrl}}/visitors/{{userId}}/password", "host": ["{{baseUrl}}"], "path": ["visitors", "{{userId}}", "password"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Lookups",
+      "item": [
+        {
+          "name": "List groups",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/groups", "host": ["{{baseUrl}}"], "path": ["groups"] } }
+        },
+        {
+          "name": "List time zones",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/timezones", "host": ["{{baseUrl}}"], "path": ["timezones"] } }
+        }
+      ]
+    },
+    {
+      "name": "Access Logs (Reports > Access Global)",
+      "item": [
+        {
+          "name": "List access logs (no filters)",
+          "request": { "method": "GET", "url": { "raw": "{{baseUrl}}/access-logs?limit=10&offset=0", "host": ["{{baseUrl}}"], "path": ["access-logs"], "query": [{ "key": "limit", "value": "10" }, { "key": "offset", "value": "0" }] } }
+        },
+        {
+          "name": "List access logs (date range + user/group/timezone filters)",
+          "request": {
+            "method": "GET",
+            "url": {
+              "raw": "{{baseUrl}}/access-logs?from=1789166400&to=1789430399&limit=10&offset=0&userIds={{userId}}&groupIds={{groupId}}",
+              "host": ["{{baseUrl}}"], "path": ["access-logs"],
+              "query": [
+                { "key": "from", "value": "1789166400" },
+                { "key": "to", "value": "1789430399" },
+                { "key": "limit", "value": "10" },
+                { "key": "offset", "value": "0" },
+                { "key": "userIds", "value": "{{userId}}" },
+                { "key": "groupIds", "value": "{{groupId}}" }
+              ]
+            },
+            "description": "from/to are unix epoch seconds. userIds/groupIds/timeZoneIds accept comma-separated and/or repeated values; leave a filter out entirely for \"(All)\"."
+          }
+        }
+      ]
+    }
+  ]
+}

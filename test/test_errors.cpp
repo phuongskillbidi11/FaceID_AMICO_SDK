@@ -108,7 +108,7 @@ TEST_CASE("autoRelogin=true retries exactly once after a fresh login") {
     CHECK(users.size() == 3);
     CHECK(loginCalls == 1);
     CHECK(usersQueryCalls == 2);
-    CHECK(profileCalls == 18);  // 6 queries for each of the 3 returned users
+    CHECK(profileCalls == 21);  // 7 queries for each of the 3 returned users (added: c_users cpf lookup)
 }
 
 TEST_CASE("getImage returns exact binary bytes and the device Content-Type") {

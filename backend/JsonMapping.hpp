@@ -13,9 +13,15 @@
 
 namespace amico::backend {
 
+nlohmann::json toJson(const amico::Group& group);
+nlohmann::json toJson(const amico::TimeZone& timeZone);
 nlohmann::json toJson(const amico::AmicoUser& user);
 nlohmann::json toJson(const amico::AccessLogEntry& entry);
+nlohmann::json toJson(const amico::AccessLogEntry& entry,
+                      const std::string& userName, const std::string& employeeId,
+                      const std::string& portalName, const std::string& timeZoneName);
 nlohmann::json toJson(const amico::SystemInformation& info);
+nlohmann::json toJson(const amico::Visit& visit);
 
 /// Throws nlohmann::json::exception (missing/wrong-typed required
 /// field) or std::invalid_argument/std::out_of_range (numeric parsing)
@@ -23,5 +29,13 @@ nlohmann::json toJson(const amico::SystemInformation& info);
 /// 400, never letting them reach ErrorMapping's AmicoError table.
 amico::NewUser fromJsonNewUser(const nlohmann::json& body);
 amico::UserUpdate fromJsonUserUpdate(int64_t id, const nlohmann::json& body);
+amico::NewVisit fromJsonNewVisit(const nlohmann::json& body);
+/// Never parses a "finished" key -- that field has no generic-update
+/// path (use POST /visits/:id/finish instead); a caller-supplied
+/// "finished" key is silently ignored, matching VisitUpdate having no
+/// such member to populate at all
+/// (.plans/2026-09-14-implement-visits-enroll-visits-crud/spec.md
+/// Decision 4).
+amico::VisitUpdate fromJsonVisitUpdate(int64_t id, const nlohmann::json& body);
 
 }  // namespace amico::backend

@@ -1,0 +1,45 @@
+plan: 2026-09-14-implement-visitors-enroll-visitors-list-
+risk_level: feature
+planned_at:
+    git_sha: f23af39bc29dcfc1000a3afe3dd6c315f3dd3df4
+state: APPROVED
+write_scope:
+    - include/amico/Types.hpp
+    - include/amico/Client.hpp
+    - src/Client.cpp
+    - src/ObjectQuery.hpp
+    - src/ObjectQuery.cpp
+    - backend/JsonMapping.hpp
+    - backend/JsonMapping.cpp
+    - backend/Routes.cpp
+    - frontend/users.js
+    - frontend/visitors.js
+    - frontend/index.html
+    - frontend/style.css
+    - CMakeLists.txt
+    - test/test_visitors.cpp
+    - test/test_query_whitelist.cpp
+    - test/test_users.cpp
+    - test/UserProfileResponder.hpp
+    - test/backend/test_routes.cpp
+    - test/test_errors.cpp
+    - docs/backend-api.md
+    - docs/api-roadmap.md
+    - .plans/2026-09-14-implement-visitors-enroll-visitors-list-/DECISION_LOG.md
+    - .plans/2026-09-14-implement-visitors-enroll-visitors-list-/sprint-summary.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 1
+requires_approval: false
+review:
+    verdict: PASS
+    reviewed_at: "2026-09-13T19:38:18Z"
+verification:
+    verdict: FAIL
+    verified_at: "2026-09-13T20:21:16Z"
+spec_approved_at: "2026-09-13T19:32:10Z"

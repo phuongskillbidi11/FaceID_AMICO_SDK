@@ -1,7 +1,7 @@
 {
   "access_logs": [
-    {"id": 211, "time": 1789153178, "user_id": 36, "portal_id": 1, "log_type_id": -1, "event": 7},
-    {"id": 210, "time": 1789150733, "user_id": 5, "portal_id": 1, "log_type_id": -1, "event": 6},
-    {"id": 209, "time": 1789150000, "user_id": null, "portal_id": null, "log_type_id": -1, "event": 6}
+    {"id": 211, "time": 1789153178, "user_id": 36, "portal_id": 1, "log_type_id": -1, "event": 7, "identifier_id": 1717658368},
+    {"id": 210, "time": 1789150733, "user_id": 5, "portal_id": 1, "log_type_id": -1, "event": 6, "identifier_id": 1717658368},
+    {"id": 209, "time": 1789150000, "user_id": null, "portal_id": null, "log_type_id": -1, "event": 6, "identifier_id": 1717658368}
   ]
 }

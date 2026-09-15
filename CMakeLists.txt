@@ -57,6 +57,8 @@ if(AMICO_BUILD_TESTS)
         test/test_network_safety.cpp
         test/test_users.cpp
         test/test_users_profile.cpp
+        test/test_visitors.cpp
+        test/test_visits.cpp
         test/test_access_logs.cpp
         test/test_redaction.cpp
         test/test_query_whitelist.cpp
