@@ -357,3 +357,24 @@ TEST_CASE("Q-14: kTimeSpanFields never includes password/salt/panic_password/pan
         CHECK(field != "panic_salt");
     }
 }
+
+TEST_CASE("Q-15 (Holidays write-side plan, 2026-09-15): no new holidays builder accepts a caller-supplied object/field/connector string") {
+    // buildHolidaysListBody/buildHolidayCreateBody/UpdateBody/DeleteBody
+    // (ObjectQuery.hpp) take only int64_t/std::string/bool VALUE
+    // parameters -- never a field/object/connector name. Compile-time
+    // fact verified by their signatures; no runtime assertion is
+    // meaningful here (same pattern as Q-9/Q-12/Q-13 above).
+    CHECK(detail::buildHolidaysListBody()["object"] == "holidays");
+    CHECK(detail::buildHolidayCreateBody("Test", 0, true, true, true, true)["object"] == "holidays");
+    CHECK(detail::buildHolidayUpdateBody(1, "Test", 0, true, true, true, true)["object"] == "holidays");
+    CHECK(detail::buildHolidayDeleteBody(1)["object"] == "holidays");
+}
+
+TEST_CASE("Q-16: kHolidayFields never includes password/salt/panic_password/panic_salt") {
+    for (const auto& field : detail::kHolidayFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
+}

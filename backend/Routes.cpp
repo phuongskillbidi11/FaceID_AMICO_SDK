@@ -1128,6 +1128,82 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Holidays (2026-09-15-holidays-write-side) -- no protected-id
+    // record for this object (spec.md Background: no `noSave` in
+    // class.js), unlike Groups/Time Zones. No X-Confirm-Sensitive-Action
+    // header required, same precedent as Groups/Time Zones/Visits.
+    svr.Get("/holidays", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& holiday : client.holidays().list()) rows.push_back(toJson(holiday));
+            res.set_content(nlohmann::json{{"holidays", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post("/holidays", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewHoliday newHoliday;
+        try {
+            newHoliday = fromJsonNewHoliday(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.holidays().create(newHoliday);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Patch(R"(/holidays/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::HolidayUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonHolidayUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.holidays().update(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/holidays/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.holidays().remove(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/access-logs", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

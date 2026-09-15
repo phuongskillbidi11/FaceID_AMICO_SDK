@@ -280,12 +280,38 @@ public:
         AmicoClient* owner_;
     };
 
+    /// Typed read/write wrapper for the `holidays` object (Holidays
+    /// write-side plan, 2026-09-15). No protected-id record exists for
+    /// this object (spec.md Background: no `noSave` in class.js) --
+    /// every holiday supports full remove.
+    class HolidaysApi {
+    public:
+        std::vector<Holiday> list();
+
+        /// POST /create_objects.fcgi. Returns the device-assigned holiday id.
+        /// `end` is always computed internally as `start + 86399`
+        /// (spec.md Decision 1) -- never caller-settable.
+        int64_t create(const NewHoliday& holiday);
+        /// POST /modify_objects.fcgi. Throws ProtocolError if no holiday
+        /// changed. Same internal `end` computation as create().
+        void update(const HolidayUpdate& holiday);
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if no holiday
+        /// removed.
+        void remove(int64_t id);
+
+    private:
+        friend class AmicoClient;
+        explicit HolidaysApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
     UsersApi& users() { return usersApi_; }
     AccessLogsApi& accessLogs() { return accessLogsApi_; }
     PortalsApi& portals() { return portalsApi_; }
     GroupsApi& groups() { return groupsApi_; }
     TimeZonesApi& timeZones() { return timeZonesApi_; }
     VisitsApi& visits() { return visitsApi_; }
+    HolidaysApi& holidays() { return holidaysApi_; }
 
     /// Development/discovery use only -- returns the raw ~73KB object
     /// schema from POST /object_metadata.fcgi. Not part of the normal
@@ -299,6 +325,7 @@ private:
     friend class GroupsApi;
     friend class TimeZonesApi;
     friend class VisitsApi;
+    friend class HolidaysApi;
 
     /// Test-only seam: swaps the internal transport for a fake one so
     /// offline tests never touch a real socket. Declared here (not in a
@@ -345,6 +372,10 @@ private:
     void updateVisitImpl(const VisitUpdate& visit);
     void removeVisitImpl(int64_t id);
     void finishVisitImpl(int64_t id);
+    std::vector<Holiday> listHolidaysImpl();
+    int64_t createHolidayImpl(const NewHoliday& holiday);
+    void updateHolidayImpl(const HolidayUpdate& holiday);
+    void removeHolidayImpl(int64_t id);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -355,6 +386,7 @@ private:
     GroupsApi groupsApi_{this};
     TimeZonesApi timeZonesApi_{this};
     VisitsApi visitsApi_{this};
+    HolidaysApi holidaysApi_{this};
 };
 
 /// See AmicoClient's friend declaration above. Defined in src/Client.cpp;

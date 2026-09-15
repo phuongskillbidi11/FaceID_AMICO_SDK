@@ -111,6 +111,34 @@ nlohmann::json buildTimeSpanUpdateBody(const TimeSpanUpdate& span);
 /// caveat.
 nlohmann::json buildTimeSpanDeleteBody(int64_t id);
 
+/// Full holidays list, unfiltered/unpaginated (this device has few
+/// enough holidays that a full list is appropriate, same rationale as
+/// buildGroupsListBody/buildTimeZonesListBody).
+nlohmann::json buildHolidaysListBody();
+
+/// Single-holiday creation body for `create_objects.fcgi`.
+/// LIVE_CONFIRMED wire shape 2026-09-15 via XHR-interceptor capture
+/// (.plans/2026-09-15-holidays-write-side/spec.md Background): same
+/// extended shape as buildGroupCreateBody/buildTimeZoneCreateBody.
+/// `end` is computed internally as `start + 86399` and included in
+/// `values` (spec.md Decision 1); `hol1`/`hol2`/`hol3`/`repeats` are
+/// encoded as 0/1 integers via `boolToDeviceInt()`, not JSON booleans
+/// (spec.md Decision 2, directly confirmed by this same capture, not
+/// inferred from time_spans).
+nlohmann::json buildHolidayCreateBody(const std::string& name, int64_t start,
+                                       bool hol1, bool hol2, bool hol3, bool repeats);
+
+/// Single-holiday update body for `modify_objects.fcgi`. NOT
+/// independently live-captured -- built by symmetry with the shared
+/// `messenger.js` mechanism. Confirm during this plan's own Group 7
+/// live check.
+nlohmann::json buildHolidayUpdateBody(int64_t id, const std::string& name, int64_t start,
+                                       bool hol1, bool hol2, bool hol3, bool repeats);
+
+/// Single-holiday deletion body for `destroy_objects.fcgi`. Same
+/// not-yet-independently-confirmed caveat as buildHolidayUpdateBody.
+nlohmann::json buildHolidayDeleteBody(int64_t id);
+
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
 
@@ -333,5 +361,6 @@ extern const std::vector<std::string> kCardWritableFields;
 extern const std::vector<std::string> kUserRoleWritableFields;
 extern const std::vector<std::string> kVisitFields;
 extern const std::vector<std::string> kTimeSpanFields;
+extern const std::vector<std::string> kHolidayFields;
 
 }  // namespace amico::detail

@@ -558,6 +558,40 @@ as create (no meaningful partial update). `200 {"success": true}`.
 ### `DELETE /timespans/:id`
 `200 {"success": true}`.
 
+### `GET /holidays`
+Session required. Read-only list of holiday dates. `200` response:
+```json
+{"holidays": [{"id": 1, "name": "New Year", "start": 1735689600,
+  "hol1": true, "hol2": false, "hol3": true, "repeats": true,
+  "end": 1735775999}]}
+```
+An empty list returns `{"holidays": []}`. `start`/`end` are Unix epoch
+seconds; `end` is always `start + 86399` (see the note below). `hol1`/
+`hol2`/`hol3` are which of the device's 3 holiday categories this date
+belongs to (the same 3 categories `time_spans`' own `hol1`..`hol3`
+reference); `repeats` is yearly recurrence.
+
+### `POST /holidays`
+Body: `{"name": "<holiday name>", "start": <epoch seconds>, "hol1":
+<bool>, "hol2": <bool>, "hol3": <bool>, "repeats": <bool>}`. `201
+{"id": <new holiday id>}`.
+
+**No `end` in the request body:** this backend/SDK always computes
+`end = start + 86399` internally, matching the real device's own
+`beforeSave` hook — its own Add/Edit form has no End control at all. A
+caller-supplied `end` key is silently ignored.
+
+### `PATCH /holidays/:id`
+Same body shape as create (no meaningful partial update — the frontend
+always sends the full current+edited set). `200 {"success": true}`.
+
+### `DELETE /holidays/:id`
+`200 {"success": true}`.
+
+**No protected holiday:** unlike Groups/Time Zones, `holidays` has no
+`noSave` id in the device's own `class.js` — every holiday supports
+full edit/remove, in both the real device's UI and this backend.
+
 ### `GET /access-logs?from=&to=&limit=&offset=&userIds=&groupIds=&timeZoneIds=`
 Session required. Optional `userIds`, `groupIds`, and `timeZoneIds` accept
 signed 64-bit integer IDs, comma-separated and/or repeated. For example:

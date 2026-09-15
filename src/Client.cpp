@@ -862,6 +862,67 @@ struct AmicoClient::Impl {
         }
     }
 
+    Holiday mapHoliday(const nlohmann::json& row) {
+        Holiday holiday;
+        holiday.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (holidays)");
+        holiday.name = requireField<std::string>(row, "name", "/load_objects.fcgi (holidays)");
+        holiday.start = requireField<int64_t>(row, "start", "/load_objects.fcgi (holidays)");
+        holiday.hol1 = requireBoolLikeField(row, "hol1", "/load_objects.fcgi (holidays)");
+        holiday.hol2 = requireBoolLikeField(row, "hol2", "/load_objects.fcgi (holidays)");
+        holiday.hol3 = requireBoolLikeField(row, "hol3", "/load_objects.fcgi (holidays)");
+        holiday.repeats = requireBoolLikeField(row, "repeats", "/load_objects.fcgi (holidays)");
+        holiday.end = requireField<int64_t>(row, "end", "/load_objects.fcgi (holidays)");
+        return holiday;
+    }
+
+    std::vector<Holiday> listHolidays() {
+        nlohmann::json body = detail::buildHolidaysListBody();
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto holidaysIt = response.find("holidays");
+        if (holidaysIt == response.end() || !holidaysIt->is_array()) {
+            throw ProtocolError("missing required field 'holidays' in response from /load_objects.fcgi");
+        }
+        std::vector<Holiday> result;
+        result.reserve(holidaysIt->size());
+        for (const auto& row : *holidaysIt) {
+            result.push_back(mapHoliday(row));
+        }
+        return result;
+    }
+
+    int64_t createHoliday(const NewHoliday& holiday) {
+        nlohmann::json body = detail::buildHolidayCreateBody(holiday.name, holiday.start,
+                                                               holiday.hol1, holiday.hol2, holiday.hol3, holiday.repeats);
+        nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
+
+        nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
+        if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        return ids.front().get<int64_t>();
+    }
+
+    void updateHoliday(const HolidayUpdate& holiday) {
+        nlohmann::json body = detail::buildHolidayUpdateBody(holiday.id, holiday.name, holiday.start,
+                                                               holiday.hol1, holiday.hol2, holiday.hol3, holiday.repeats);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeHoliday(int64_t id) {
+        nlohmann::json body = detail::buildHolidayDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
     /// Resolves the 2-hop time-zone join for a batch of access_log ids
     /// (spec.md Decision 2b). Tie-break: the first row encountered at
     /// each hop wins -- deterministic, not arbitrary; matches every row
@@ -1161,6 +1222,10 @@ int64_t AmicoClient::createVisitImpl(const NewVisit& visit) { return impl_->crea
 void AmicoClient::updateVisitImpl(const VisitUpdate& visit) { impl_->updateVisit(visit); }
 void AmicoClient::removeVisitImpl(int64_t id) { impl_->removeVisit(id); }
 void AmicoClient::finishVisitImpl(int64_t id) { impl_->finishVisit(id); }
+std::vector<Holiday> AmicoClient::listHolidaysImpl() { return impl_->listHolidays(); }
+int64_t AmicoClient::createHolidayImpl(const NewHoliday& holiday) { return impl_->createHoliday(holiday); }
+void AmicoClient::updateHolidayImpl(const HolidayUpdate& holiday) { impl_->updateHoliday(holiday); }
+void AmicoClient::removeHolidayImpl(int64_t id) { impl_->removeHoliday(id); }
 
 std::vector<AmicoUser> AmicoClient::UsersApi::list(const UserQuery& query) { return owner_->listUsersImpl(query); }
 std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::UsersApi::getNamesByIds(const std::vector<int64_t>& ids) {
@@ -1207,6 +1272,10 @@ int64_t AmicoClient::VisitsApi::create(const NewVisit& visit) { return owner_->c
 void AmicoClient::VisitsApi::update(const VisitUpdate& visit) { owner_->updateVisitImpl(visit); }
 void AmicoClient::VisitsApi::remove(int64_t id) { owner_->removeVisitImpl(id); }
 void AmicoClient::VisitsApi::finish(int64_t id) { owner_->finishVisitImpl(id); }
+std::vector<Holiday> AmicoClient::HolidaysApi::list() { return owner_->listHolidaysImpl(); }
+int64_t AmicoClient::HolidaysApi::create(const NewHoliday& holiday) { return owner_->createHolidayImpl(holiday); }
+void AmicoClient::HolidaysApi::update(const HolidayUpdate& holiday) { owner_->updateHolidayImpl(holiday); }
+void AmicoClient::HolidaysApi::remove(int64_t id) { owner_->removeHolidayImpl(id); }
 
 void setTransportForTesting(AmicoClient& client, std::unique_ptr<IHttpTransport> transport) {
     client.impl_->transport = std::move(transport);

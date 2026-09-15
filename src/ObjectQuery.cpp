@@ -36,6 +36,10 @@ const std::vector<std::string> kTimeSpanFields = {
     "hol1", "hol2", "hol3",
 };
 
+const std::vector<std::string> kHolidayFields = {
+    "id", "name", "start", "hol1", "hol2", "hol3", "repeats", "end",
+};
+
 nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
     nlohmann::json body;
     body["join"] = "LEFT";
@@ -266,6 +270,61 @@ nlohmann::json buildTimeSpanDeleteBody(int64_t id) {
     nlohmann::json body;
     body["object"] = "time_spans";
     body["where"] = {{"time_spans", {{"id", nlohmann::json::array({id})}}}};
+    return body;
+}
+
+nlohmann::json buildHolidaysListBody() {
+    nlohmann::json body;
+    body["object"] = "holidays";
+    body["fields"] = kHolidayFields;
+    return body;
+}
+
+namespace {
+// end is a derived, not independently settable field -- the real
+// device's own class.js beforeSave hook always computes it this way
+// (spec.md Decision 1), and its own Add/Edit form has no End control.
+int64_t deriveHolidayEnd(int64_t start) { return start + 86399; }
+}  // namespace
+
+nlohmann::json buildHolidayCreateBody(const std::string& name, int64_t start,
+                                       bool hol1, bool hol2, bool hol3, bool repeats) {
+    // Verbatim shape captured live 2026-09-15 -- same extended shape
+    // as buildGroupCreateBody/buildTimeZoneCreateBody. hol1/hol2/hol3/
+    // repeats are 0/1 integers (spec.md Decision 2), not JSON booleans.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "holidays";
+    body["fields"] = kHolidayFields;
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"start"});
+    body["values"] = nlohmann::json::array({{
+        {"name", name}, {"start", start},
+        {"hol1", boolToDeviceInt(hol1)}, {"hol2", boolToDeviceInt(hol2)}, {"hol3", boolToDeviceInt(hol3)},
+        {"repeats", boolToDeviceInt(repeats)},
+        {"end", deriveHolidayEnd(start)},
+    }});
+    return body;
+}
+
+nlohmann::json buildHolidayUpdateBody(int64_t id, const std::string& name, int64_t start,
+                                       bool hol1, bool hol2, bool hol3, bool repeats) {
+    nlohmann::json body;
+    body["object"] = "holidays";
+    body["values"] = {
+        {"name", name}, {"start", start},
+        {"hol1", boolToDeviceInt(hol1)}, {"hol2", boolToDeviceInt(hol2)}, {"hol3", boolToDeviceInt(hol3)},
+        {"repeats", boolToDeviceInt(repeats)},
+        {"end", deriveHolidayEnd(start)},
+    };
+    body["where"] = {{"holidays", {{"id", id}}}};
+    return body;
+}
+
+nlohmann::json buildHolidayDeleteBody(int64_t id) {
+    nlohmann::json body;
+    body["object"] = "holidays";
+    body["where"] = {{"holidays", {{"id", nlohmann::json::array({id})}}}};
     return body;
 }
 

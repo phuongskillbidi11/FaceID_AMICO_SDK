@@ -87,6 +87,14 @@ nlohmann::json toJson(const amico::SystemInformation& info) {
     return j;
 }
 
+nlohmann::json toJson(const amico::Holiday& holiday) {
+    return {
+        {"id", holiday.id}, {"name", holiday.name}, {"start", holiday.start},
+        {"hol1", holiday.hol1}, {"hol2", holiday.hol2}, {"hol3", holiday.hol3},
+        {"repeats", holiday.repeats}, {"end", holiday.end},
+    };
+}
+
 nlohmann::json toJson(const amico::Visit& visit) {
     nlohmann::json j;
     j["id"] = visit.id;
@@ -219,6 +227,33 @@ amico::TimeSpanUpdate fromJsonTimeSpanUpdate(int64_t id, const nlohmann::json& b
     amico::TimeSpanUpdate update;
     update.id = id;
     readTimeSpanFields(update, body);
+    return update;
+}
+
+namespace {
+// "end" is deliberately never read here -- NewHoliday/HolidayUpdate
+// have no such member (spec.md Decision 1).
+template <typename T>
+void readHolidayFields(T& holiday, const nlohmann::json& body) {
+    holiday.name = body.at("name").get<std::string>();
+    holiday.start = body.at("start").get<int64_t>();
+    holiday.hol1 = body.at("hol1").get<bool>();
+    holiday.hol2 = body.at("hol2").get<bool>();
+    holiday.hol3 = body.at("hol3").get<bool>();
+    holiday.repeats = body.at("repeats").get<bool>();
+}
+}  // namespace
+
+amico::NewHoliday fromJsonNewHoliday(const nlohmann::json& body) {
+    amico::NewHoliday holiday;
+    readHolidayFields(holiday, body);
+    return holiday;
+}
+
+amico::HolidayUpdate fromJsonHolidayUpdate(int64_t id, const nlohmann::json& body) {
+    amico::HolidayUpdate update;
+    update.id = id;
+    readHolidayFields(update, body);
     return update;
 }
 

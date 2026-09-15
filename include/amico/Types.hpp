@@ -323,6 +323,48 @@ struct GroupUpdate {
     std::string name;
 };
 
+/// Public view of the `holidays` object. `end` is always
+/// `start + 86399` (LIVE_CONFIRMED via the create payload -- see
+/// .plans/2026-09-15-holidays-write-side/spec.md Background/Decision 1)
+/// -- a derived field, never independently entered in the real
+/// device's own UI.
+struct Holiday {
+    int64_t id = 0;
+    std::string name;
+    int64_t start = 0;
+    bool hol1 = true;
+    bool hol2 = true;
+    bool hol3 = true;
+    bool repeats = true;
+    int64_t end = 86399;
+};
+
+/// Creation parameters for the `holidays` object. Deliberately has no
+/// `end` member -- this SDK always computes it as `start + 86399`
+/// server-side (spec.md Decision 1), matching the real device's own
+/// `beforeSave` hook; there is no code path to set an inconsistent
+/// start/end pair.
+struct NewHoliday {
+    std::string name;
+    int64_t start = 0;
+    bool hol1 = true;
+    bool hol2 = true;
+    bool hol3 = true;
+    bool repeats = true;
+};
+
+/// Update parameters for the `holidays` object. Same no-`end`-member
+/// rationale as `NewHoliday`.
+struct HolidayUpdate {
+    int64_t id = 0;
+    std::string name;
+    int64_t start = 0;
+    bool hol1 = true;
+    bool hol2 = true;
+    bool hol3 = true;
+    bool repeats = true;
+};
+
 /// Public view of the `visits` object (Visits plan, 2026-09-14).
 /// `visitorName`/`hostName`/`cardCount` are enrichment fields this SDK
 /// resolves via the already-existing UsersApi::getNamesByIds() and

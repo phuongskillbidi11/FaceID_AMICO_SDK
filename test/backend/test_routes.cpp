@@ -854,10 +854,79 @@ TEST_CASE("U-7: DELETE /timespans/:id success returns 200") {
     CHECK(res->status == 200);
 }
 
+TEST_CASE("V-1: GET /holidays returns the holidays list") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        CHECK(body["object"] == "holidays");
+        return FakeTransport::ok(nlohmann::json{{"holidays", nlohmann::json::array({{
+            {"id", 1}, {"name", "New Year"}, {"start", 1735689600},
+            {"hol1", 1}, {"hol2", 0}, {"hol3", 1}, {"repeats", 1},
+            {"end", 1735775999},
+        }})}}.dump());
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/holidays");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    CHECK(nlohmann::json::parse(res->body)["holidays"].size() == 1);
+}
+
+TEST_CASE("V-2: POST /holidays creates a holiday, computes end server-side, and ignores a caller-supplied end") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "holidays") {
+            CHECK(body["values"][0]["name"] == "ZZ_HolidayTest");
+            CHECK(body["values"][0]["start"] == 1789430400);
+            CHECK(body["values"][0]["end"] == 1789430400 + 86399);
+            CHECK(body["values"][0]["hol1"] == 1);
+            return FakeTransport::ok(R"({"ids":[7]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    // A caller-supplied "end" is silently ignored -- fromJsonNewHoliday
+    // never parses it (spec.md Decision 1).
+    auto res = cli.Post("/holidays",
+        R"({"name":"ZZ_HolidayTest","start":1789430400,"hol1":true,"hol2":true,"hol3":true,"repeats":true,"end":999})",
+        "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 7);
+}
+
+TEST_CASE("V-3: PATCH /holidays/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/modify_objects.fcgi" && body["object"] == "holidays") {
+            CHECK(body["values"]["name"] == "Renamed");
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/holidays/1",
+        R"({"name":"Renamed","start":0,"hol1":true,"hol2":true,"hol3":true,"repeats":true})",
+        "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("V-4: DELETE /holidays/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/holidays/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);
-    for (const auto* path : {"/groups", "/timezones", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
+    for (const auto* path : {"/groups", "/timezones", "/holidays", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
         auto res = cli.Get(path);
         REQUIRE(res != nullptr); CHECK(res->status == 401);
     }

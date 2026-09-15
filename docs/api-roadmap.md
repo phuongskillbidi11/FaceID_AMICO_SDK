@@ -227,6 +227,28 @@ and a "show finished visits" history view — see
 `.plans/2026-09-14-implement-visits-enroll-visits-crud/spec.md`'s Scope
 section for the full list of deliberate exclusions.
 
+## 6c. Holidays (Enroll → Holidays) — ✅ Implemented (2026-09-15)
+
+`LIVE_CONFIRMED` via XHR-interceptor capture of the real device's own
+Add Holiday form (`.plans/2026-09-15-holidays-write-side/spec.md`
+Background) — device object `holidays`, fields: `id`/`name`/`start`/
+`hol1`/`hol2`/`hol3`/`repeats`/`end`. `end` is a **derived, not
+independently settable** field (`start + 86399`, computed by the real
+device's own `class.js` `beforeSave` hook and by this SDK internally
+— its own Add/Edit form has no End control at all). Unlike Groups/Time
+Zones, `holidays` has **no `noSave` protected-id record** — every
+holiday supports full edit/remove.
+
+| Method | Path | Device call |
+|---|---|---|
+| ✅ | `GET /holidays` | `load_objects.fcgi` `object:"holidays"` |
+| ✅ | `POST /holidays` | `create_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15 via XHR-interceptor capture: same extended shape as Groups'/Time Zones' own create; `hol1`/`hol2`/`hol3`/`repeats` sent as 0/1 integers (independently confirmed for this object, not just inferred from `time_spans`) |
+| ✅ | `PATCH /holidays/:id` | `modify_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15, Group 7 |
+| ✅ | `DELETE /holidays/:id` | `destroy_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15, Group 7 |
+
+No protected holiday id — every record supports full edit/remove, in
+both the real device's own UI and this backend/SDK.
+
 ## 7. Reports (the other report variants + export) — 📋 Planned (evidence-backed)
 
 The "Access (Global)" report's own row data (joins + labels +
@@ -307,7 +329,6 @@ pass) confirms the real object names/fields/commands.
 
 | Sidebar area | Likely difficulty | Notes |
 |---|---|---|
-| Holidays (`holiday.html`) | Low — likely small, similar shape to Time Zones' `time_spans` (holiday date list) | |
 | Scheduled Unlock (`scheduledunlock.html`) | Medium — likely depends on Time Zones + Groups/Portals | |
 | User Types (`usertypes.html`) | Low — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) | |
 | Custom Fields (`customfields.html`) | Low-Medium | |
@@ -325,29 +346,23 @@ pass) confirms the real object names/fields/commands.
 
 Within **Enroll** specifically (the sidebar area this project has
 focused on so far — Users ✅, Visitors ✅, Groups ✅, Time Zones ✅
-(read+write, 2026-09-15), Visits ✅ implemented 2026-09-14 — see
-sections 5/6/6b), the remaining items in the real device's own Enroll
-submenu, in sidebar order:
+(read+write, 2026-09-15), Visits ✅ implemented 2026-09-14, Holidays ✅
+implemented 2026-09-15 — see sections 5/6/6b/6c), the remaining items
+in the real device's own Enroll submenu, in sidebar order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | Holidays (`holiday.html`) | 🔍 discovery pending, though its schema was already incidentally found while reading `class.js` for Time Zones: `id`/`name`/`start`/`hol1..hol3`/`repeats`/`end` (computed, always `start+86399`) — see `.plans/2026-09-15-timezones-write-side/DECISION_LOG.md` |
-| 2 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
-| 3 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
-| 4 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
+| 1 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
+| 2 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
+| 3 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
 
-**Recommended next single step:** Time Zones' write side (zone create/
-rename/delete plus full `time_spans` CRUD) is now implemented
-(SDK/backend/frontend/tests — section 6); only the gated Group 8 live
-test remains to independently confirm the `modify_objects.fcgi`/
-`destroy_objects.fcgi` shapes (currently inferred by symmetry with the
-already-proven shared mechanism) — see
-`.plans/2026-09-15-timezones-write-side/tasks.md`. Otherwise, Holidays
-per row 1 above is the next ready-to-plan item — its schema is already
-known from this session's own `class.js` read, just needs its own
-short live-capture pass on the create/update payload shape (matching
-this project's now-established "capture the create shape live before
-assuming symmetry" discipline) before planning.
+**Recommended next single step:** Holidays' write side (create/update/
+delete) is now implemented (SDK/backend/frontend/tests — section 6c);
+only the gated Group 7 live test remains to independently confirm the
+`modify_objects.fcgi`/`destroy_objects.fcgi` shapes (currently inferred
+by symmetry with the already-proven shared mechanism) — see
+`.plans/2026-09-15-holidays-write-side/tasks.md`. Otherwise, Scheduled
+Unlock per row 1 above is the next item needing a discovery pass.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings
