@@ -474,14 +474,18 @@ device's own filters — visitor's name/id/card — are documented but not
 wired into this endpoint), and a "show finished visits" history view.
 
 ### `GET /groups`
-Session required. Read-only list of group IDs and names; no pagination
-on this route (write operations are separate routes, below). `200`
-response:
+Session required. Read-only list of group IDs, names, and linked time
+zone ids; no pagination on this route (write operations are separate
+routes, below). `200` response:
 ```json
-{"groups": [{"id": 1, "name": "Staff"}]}
+{"groups": [{"id": 1, "name": "Staff", "timeZoneIds": [1]}]}
 ```
 An empty list returns `{"groups": []}`. The SDK requests only `id` and
-`name` from the device's `groups` object, with no `where` constraint.
+`name` from the device's `groups` object, with no `where` constraint,
+plus one additional read per row to resolve `timeZoneIds` (see
+`docs/api-roadmap.md` section 10b for the underlying
+`access_rules`/`access_rule_time_zones` mechanism, shared with
+Scheduled Unlock).
 
 ### `POST /groups`
 Body: `{"name": "<group name>"}`. `201 {"id": <new group id>}`.
@@ -502,7 +506,25 @@ whether the device's own API enforces it or only its own UI merely
 chooses not to offer the controls. A caller hitting `PATCH`/`DELETE`
 against that id gets whatever the device itself does (success, or a
 rejected-write error surfaced the normal way) -- this backend does not
-invent an extra guard the device may not have.
+invent an extra guard the device may not have. Note this restriction
+covers only the `name` field and the Remove action -- the real
+device's own Time Zones tab (below) has no equivalent lock, confirmed
+via `class.js`, so this backend doesn't lock it either.
+
+### `POST /groups/:id/timezones/:timeZoneId`
+Both ids come from the URL; no body. `200 {"success": true}`. Links
+the given time zone to the group, auto-creating the backing
+`access_rules`/`group_access_rules` rows on the first link for a given
+group -- the exact same mechanism already shipped for
+`POST /scheduled-unlocks/:id/timezones/:timeZoneId`, just
+`group_access_rules` in place of `scheduled_unlock_access_rules`.
+
+### `DELETE /groups/:id/timezones/:timeZoneId`
+Both ids come from the URL. `200 {"success": true}`. Unlinks the given
+time zone. Only the specific link row is removed -- the backing
+`access_rules`/`group_access_rules` rows are left intact even if this
+was the last linked time zone (same no-cascade-cleanup stance as
+Scheduled Unlock).
 
 ### `GET /timezones`
 Session required. Read-only list of time-zone IDs and names, using the

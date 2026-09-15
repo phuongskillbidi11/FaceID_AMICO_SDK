@@ -971,6 +971,50 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Groups Time Zones tab (2026-09-16-groups-timezones-write-side) --
+    // reuses the exact access_rules/access_rule_time_zones mechanism
+    // already shipped for Scheduled Unlock. No X-Confirm-Sensitive-Action
+    // header required, same precedent as the rest of this route family.
+    svr.Post(R"(/groups/(\d+)/timezones/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t groupId = 0, timeZoneId = 0;
+        try {
+            groupId = std::stoll(req.matches[1]);
+            timeZoneId = std::stoll(req.matches[2]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.groups().addTimeZone(groupId, timeZoneId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/groups/(\d+)/timezones/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t groupId = 0, timeZoneId = 0;
+        try {
+            groupId = std::stoll(req.matches[1]);
+            timeZoneId = std::stoll(req.matches[2]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.groups().removeTimeZone(groupId, timeZoneId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/timezones", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

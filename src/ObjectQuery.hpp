@@ -77,6 +77,29 @@ nlohmann::json buildGroupUpdateBody(int64_t id, const std::string& name);
 /// not-yet-independently-confirmed caveat as buildGroupUpdateBody.
 nlohmann::json buildGroupDeleteBody(int64_t id);
 
+/// Resolves the linked time-zone ids for one group. LIVE_CONFIRMED
+/// shape 2026-09-16 (.plans/2026-09-16-groups-timezones-write-side/spec.md
+/// Background) -- identical cross-object where pattern already used
+/// by buildScheduledUnlockTimeZoneIdsBody, just where.object:
+/// "groups" instead of "scheduled_unlocks".
+nlohmann::json buildGroupTimeZoneIdsBody(int64_t groupId);
+
+/// Finds the access_rule_id linked to a group, if any (via
+/// group_access_rules). NOT independently live-captured -- inferred
+/// by symmetry with buildScheduledUnlockAccessRuleIdBody (spec.md
+/// Decision 1, Risks). Confirm/adjust during this plan's own Group 8.
+nlohmann::json buildGroupAccessRuleIdBody(int64_t groupId);
+
+/// Creates the access_rules row backing a group's first ever
+/// time-zone link. LIVE_CONFIRMED verbatim shape 2026-09-16 -- auto-
+/// generated name matches the device's own convention exactly
+/// (`type:1, priority:0`).
+nlohmann::json buildGroupAccessRuleCreateBody(int64_t groupId);
+
+/// Links an existing access_rule to a group via group_access_rules.
+/// LIVE_CONFIRMED verbatim shape 2026-09-16.
+nlohmann::json buildGroupAccessRuleLinkBody(int64_t groupId, int64_t accessRuleId);
+
 /// Single-time-zone creation body for `create_objects.fcgi`.
 /// LIVE_CONFIRMED wire shape 2026-09-15 via XHR-interceptor capture
 /// (.plans/2026-09-15-timezones-write-side/spec.md Background): same

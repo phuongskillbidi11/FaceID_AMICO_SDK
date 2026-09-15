@@ -201,6 +201,15 @@ public:
         /// ProtocolError like any other rejected write.
         void remove(int64_t id);
 
+        /// Links a time zone to a group (2026-09-16-groups-timezones-write-side
+        /// plan). Auto-creates the backing access_rules row on the first
+        /// call for a given group, mirroring
+        /// ScheduledUnlocksApi::addTimeZone().
+        void addTimeZone(int64_t groupId, int64_t timeZoneId);
+        /// Unlinks a time zone. Throws ProtocolError if the group has no
+        /// access_rules row at all (nothing was ever linked).
+        void removeTimeZone(int64_t groupId, int64_t timeZoneId);
+
     private:
         friend class AmicoClient;
         explicit GroupsApi(AmicoClient* owner) : owner_(owner) {}
@@ -394,6 +403,8 @@ private:
     int64_t createGroupImpl(const NewGroup& group);
     void updateGroupImpl(const GroupUpdate& group);
     void removeGroupImpl(int64_t id);
+    void addGroupTimeZoneImpl(int64_t groupId, int64_t timeZoneId);
+    void removeGroupTimeZoneImpl(int64_t groupId, int64_t timeZoneId);
     std::vector<TimeZone> listTimeZonesImpl();
     int64_t createTimeZoneImpl(const NewTimeZone& zone);
     void updateTimeZoneImpl(const TimeZoneUpdate& zone);

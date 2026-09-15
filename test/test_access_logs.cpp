@@ -34,25 +34,32 @@ AmicoClient loggedInClient(FakeTransport** outFakePtr) {
 }
 }  // namespace
 
-TEST_CASE("Groups list builder and SDK send exactly the name-only read shape") {
+TEST_CASE("Groups list builder and SDK send exactly the name-only read shape, plus timeZoneIds per row") {
     const auto expected = nlohmann::json::parse(R"json({"object":"groups","fields":["id","name"]})json");
     CHECK(detail::buildGroupsListBody() == expected);
     FakeTransport* fake = nullptr;
     auto client = loggedInClient(&fake);
-    int calls = 0;
-    fake->responder = [&](const HttpRequest& req) {
-        ++calls;
-        CHECK(req.path == "/load_objects.fcgi");
-        CHECK(nlohmann::json::parse(req.body) == expected);
-        return FakeTransport::ok(R"json({"groups":[{"id":1,"name":"Staff"},{"id":2,"name":"Visitors"}]})json");
+    int groupsCalls = 0;
+    fake->responder = [&](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (body["object"] == "groups") {
+            ++groupsCalls;
+            CHECK(nlohmann::json::parse(req.body) == expected);
+            return FakeTransport::ok(R"json({"groups":[{"id":1,"name":"Staff"},{"id":2,"name":"Visitors"}]})json");
+        }
+        // Per-row timeZoneIds lookup (2026-09-16-groups-timezones-write-side).
+        CHECK(body["object"] == "time_zones");
+        return FakeTransport::ok(nlohmann::json{{"time_zones", nlohmann::json::array({{{"id", 1}}})}}.dump());
     };
     const auto groups = client.groups().list();
-    CHECK(calls == 1);
+    CHECK(groupsCalls == 1);
     REQUIRE(groups.size() == 2);
     CHECK(groups[0].id == 1);
     CHECK(groups[0].name == "Staff");
+    CHECK(groups[0].timeZoneIds == std::vector<int64_t>{1});
     CHECK(groups[1].id == 2);
     CHECK(groups[1].name == "Visitors");
+    CHECK(groups[1].timeZoneIds == std::vector<int64_t>{1});
 }
 
 TEST_CASE("Access logs unset filters preserve full serialized list/count request bodies") {

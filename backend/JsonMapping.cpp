@@ -4,7 +4,7 @@
 namespace amico::backend {
 
 nlohmann::json toJson(const amico::Group& group) {
-    return {{"id", group.id}, {"name", group.name}};
+    return {{"id", group.id}, {"name", group.name}, {"timeZoneIds", group.timeZoneIds}};
 }
 
 nlohmann::json toJson(const amico::TimeZone& timeZone) {

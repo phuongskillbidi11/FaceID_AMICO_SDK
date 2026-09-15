@@ -408,3 +408,15 @@ TEST_CASE("Q-18: kScheduledUnlockFields never includes password/salt/panic_passw
         CHECK(field != "panic_salt");
     }
 }
+
+TEST_CASE("Q-19 (Groups Time Zones write-side plan, 2026-09-16): no new group/access_rules builder accepts a caller-supplied object/field/connector string") {
+    // buildGroupTimeZoneIdsBody/AccessRuleIdBody/AccessRuleCreateBody/
+    // AccessRuleLinkBody (ObjectQuery.hpp) take only int64_t VALUE
+    // parameters -- never a field/object/connector name. Compile-time
+    // fact verified by their signatures; no runtime assertion is
+    // meaningful here (same pattern as Q-9/Q-12/Q-13/Q-15/Q-17 above).
+    CHECK(detail::buildGroupTimeZoneIdsBody(1)["object"] == "time_zones");
+    CHECK(detail::buildGroupAccessRuleIdBody(1)["object"] == "group_access_rules");
+    CHECK(detail::buildGroupAccessRuleCreateBody(1)["object"] == "access_rules");
+    CHECK(detail::buildGroupAccessRuleLinkBody(1, 4)["object"] == "group_access_rules");
+}

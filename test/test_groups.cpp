@@ -116,3 +116,153 @@ TEST_CASE("G-8: GroupsApi::remove() does not special-case any group id (includin
     // device itself rejects this, that's a ProtocolError like any other.
     CHECK_NOTHROW(client.groups().remove(1));
 }
+
+// ------------------------- G-9..G-12: Time Zones linking builder shapes -------------------------
+// (2026-09-16-groups-timezones-write-side plan)
+
+TEST_CASE("G-9: buildGroupTimeZoneIdsBody matches the live-captured cross-object where shape") {
+    nlohmann::json body = detail::buildGroupTimeZoneIdsBody(6);
+    nlohmann::json expected = {
+        {"join", "LEFT"},
+        {"object", "time_zones"},
+        {"fields", nlohmann::json::array({"id"})},
+        {"where", nlohmann::json::array({
+            {{"object", "groups"}, {"field", "id"}, {"value", 6}, {"connector", ") AND ("}},
+        })},
+        {"order", nlohmann::json::array({"name"})},
+        {"limit", 1000},
+        {"offset", 0},
+    };
+    CHECK(body == expected);
+}
+
+TEST_CASE("G-10: buildGroupAccessRuleIdBody uses the bare-object where shape") {
+    nlohmann::json body = detail::buildGroupAccessRuleIdBody(6);
+    CHECK(body["object"] == "group_access_rules");
+    CHECK(body["fields"] == nlohmann::json::array({"access_rule_id"}));
+    CHECK(body["where"] == nlohmann::json{{"group_access_rules", {{"group_id", 6}}}});
+}
+
+TEST_CASE("G-11: buildGroupAccessRuleCreateBody matches the live-captured payload verbatim") {
+    nlohmann::json body = detail::buildGroupAccessRuleCreateBody(6);
+    nlohmann::json expected = {
+        {"join", "LEFT"},
+        {"object", "access_rules"},
+        {"fields", nlohmann::json::array({"id", "name", "type", "priority"})},
+        {"where", nlohmann::json::array()},
+        {"order", nlohmann::json::array({"name"})},
+        {"values", nlohmann::json::array({{
+            {"name", "(access_rules automatically created for groups 6)"},
+            {"type", 1}, {"priority", 0},
+        }})},
+    };
+    CHECK(body == expected);
+}
+
+TEST_CASE("G-12: buildGroupAccessRuleLinkBody matches the live-captured payload verbatim") {
+    nlohmann::json body = detail::buildGroupAccessRuleLinkBody(6, 7);
+    nlohmann::json expected = {
+        {"object", "group_access_rules"},
+        {"values", nlohmann::json::array({{{"group_id", 6}, {"access_rule_id", 7}}})},
+    };
+    CHECK(body == expected);
+}
+
+// ------------------------- G-13..G-16: GroupsApi::addTimeZone/removeTimeZone -------------------------
+
+TEST_CASE("G-13: addTimeZone() creates access_rules + group_access_rules on the first call, in order") {
+    FakeTransport* fake = nullptr;
+    AmicoClient client = loggedInClient(&fake);
+    std::vector<std::string> order;
+    fake->responder = [&](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "group_access_rules") {
+            order.push_back("lookup");
+            return FakeTransport::ok(nlohmann::json{{"group_access_rules", nlohmann::json::array()}}.dump());
+        }
+        if (req.path == "/create_objects.fcgi" && object == "access_rules") {
+            order.push_back("create_access_rule");
+            CHECK(body["values"][0]["name"] == "(access_rules automatically created for groups 6)");
+            return FakeTransport::ok(R"({"ids":[7]})");
+        }
+        if (req.path == "/create_objects.fcgi" && object == "group_access_rules") {
+            order.push_back("link_access_rule");
+            CHECK(body["values"][0]["group_id"] == 6);
+            CHECK(body["values"][0]["access_rule_id"] == 7);
+            return FakeTransport::ok(R"({"ids":[9]})");
+        }
+        if (req.path == "/create_objects.fcgi" && object == "access_rule_time_zones") {
+            order.push_back("link_time_zone");
+            CHECK(body["values"][0]["access_rule_id"] == 7);
+            CHECK(body["values"][0]["time_zone_id"] == 1);
+            return FakeTransport::ok(R"({"ids":[10]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+
+    client.groups().addTimeZone(6, 1);
+    REQUIRE(order.size() == 4);
+    CHECK(order[0] == "lookup");
+    CHECK(order[1] == "create_access_rule");
+    CHECK(order[2] == "link_access_rule");
+    CHECK(order[3] == "link_time_zone");
+}
+
+TEST_CASE("G-14: addTimeZone() reuses an existing access_rule on a second call") {
+    FakeTransport* fake = nullptr;
+    AmicoClient client = loggedInClient(&fake);
+    std::vector<std::string> order;
+    fake->responder = [&](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "group_access_rules") {
+            order.push_back("lookup");
+            return FakeTransport::ok(nlohmann::json{{"group_access_rules", nlohmann::json::array({
+                {{"access_rule_id", 7}},
+            })}}.dump());
+        }
+        if (req.path == "/create_objects.fcgi" && object == "access_rule_time_zones") {
+            order.push_back("link_time_zone");
+            CHECK(body["values"][0]["access_rule_id"] == 7);
+            CHECK(body["values"][0]["time_zone_id"] == 5);
+            return FakeTransport::ok(R"({"ids":[11]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+
+    client.groups().addTimeZone(6, 5);
+    REQUIRE(order.size() == 2);
+    CHECK(order[0] == "lookup");
+    CHECK(order[1] == "link_time_zone");
+}
+
+TEST_CASE("G-15: removeTimeZone() unlinks via the found access_rule_id") {
+    FakeTransport* fake = nullptr;
+    AmicoClient client = loggedInClient(&fake);
+    fake->responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "group_access_rules") {
+            return FakeTransport::ok(nlohmann::json{{"group_access_rules", nlohmann::json::array({
+                {{"access_rule_id", 7}},
+            })}}.dump());
+        }
+        if (req.path == "/destroy_objects.fcgi" && object == "access_rule_time_zones") {
+            CHECK(body["where"][0]["value"] == 7);
+            CHECK(body["where"][1]["value"] == nlohmann::json::array({1}));
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    CHECK_NOTHROW(client.groups().removeTimeZone(6, 1));
+}
+
+TEST_CASE("G-16: removeTimeZone() throws ProtocolError when no access_rule exists") {
+    FakeTransport* fake = nullptr;
+    AmicoClient client = loggedInClient(&fake);
+    fake->responder = [](const HttpRequest&) {
+        return FakeTransport::ok(nlohmann::json{{"group_access_rules", nlohmann::json::array()}}.dump());
+    };
+    CHECK_THROWS_AS(client.groups().removeTimeZone(6, 1), ProtocolError);
+}

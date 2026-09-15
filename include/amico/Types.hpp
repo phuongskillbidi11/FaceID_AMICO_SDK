@@ -294,16 +294,18 @@ struct TimeSpanUpdate {
     bool hol3 = true;
 };
 
-/// Public view of the `groups` object (name only — same minimal-
-/// surface rationale as Portal/TimeZone; originally list-only, used to
-/// populate the Access (Global) report's Group filter -- see
-/// .plans/2026-09-14-access-global-report-full-parity-reports/spec.md
-/// Decision 1). Create/update/remove added by the
-/// 2026-09-15-groups-write-side plan -- see `NewGroup`/`GroupUpdate`
-/// below.
+/// Public view of the `groups` object. Create/update/remove added by
+/// the 2026-09-15-groups-write-side plan -- see `NewGroup`/
+/// `GroupUpdate` below. `timeZoneIds` added by the
+/// 2026-09-16-groups-timezones-write-side plan -- resolved through a
+/// 2-hop join (`access_rules`/`access_rule_time_zones`), not a real
+/// device column, same mechanism already confirmed for
+/// `ScheduledUnlock.timeZoneIds` -- see
+/// .plans/2026-09-16-groups-timezones-write-side/spec.md Background.
 struct Group {
     int64_t id = 0;
     std::string name;
+    std::vector<int64_t> timeZoneIds;
 };
 
 /// Creation parameters for the `groups` object. LIVE_CONFIRMED

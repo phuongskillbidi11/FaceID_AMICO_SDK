@@ -172,6 +172,61 @@ nlohmann::json buildGroupDeleteBody(int64_t id) {
     return body;
 }
 
+nlohmann::json buildGroupTimeZoneIdsBody(int64_t groupId) {
+    // Verbatim shape captured live 2026-09-16 -- identical
+    // cross-object where pattern already used by
+    // buildScheduledUnlockTimeZoneIdsBody, just where.object:
+    // "groups" instead of "scheduled_unlocks".
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "time_zones";
+    body["fields"] = nlohmann::json::array({"id"});
+    body["where"] = nlohmann::json::array({
+        {{"object", "groups"}, {"field", "id"}, {"value", groupId}, {"connector", ") AND ("}},
+    });
+    body["order"] = nlohmann::json::array({"name"});
+    body["limit"] = 1000;
+    body["offset"] = 0;
+    return body;
+}
+
+nlohmann::json buildGroupAccessRuleIdBody(int64_t groupId) {
+    // NOT independently live-captured -- inferred by symmetry with
+    // buildScheduledUnlockAccessRuleIdBody (spec.md Decision 1,
+    // Risks). Confirm/adjust during this plan's own Group 8.
+    nlohmann::json body;
+    body["object"] = "group_access_rules";
+    body["fields"] = nlohmann::json::array({"access_rule_id"});
+    body["where"] = {{"group_access_rules", {{"group_id", groupId}}}};
+    return body;
+}
+
+nlohmann::json buildGroupAccessRuleCreateBody(int64_t groupId) {
+    // Verbatim shape captured live 2026-09-16 -- auto-generated name
+    // matches the device's own convention exactly.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "access_rules";
+    body["fields"] = nlohmann::json::array({"id", "name", "type", "priority"});
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"name"});
+    body["values"] = nlohmann::json::array({{
+        {"name", "(access_rules automatically created for groups " + std::to_string(groupId) + ")"},
+        {"type", 1}, {"priority", 0},
+    }});
+    return body;
+}
+
+nlohmann::json buildGroupAccessRuleLinkBody(int64_t groupId, int64_t accessRuleId) {
+    // Verbatim shape captured live 2026-09-16.
+    nlohmann::json body;
+    body["object"] = "group_access_rules";
+    body["values"] = nlohmann::json::array({
+        {{"group_id", groupId}, {"access_rule_id", accessRuleId}},
+    });
+    return body;
+}
+
 nlohmann::json buildTimeZonesListBody() {
     nlohmann::json body;
     body["object"] = "time_zones";

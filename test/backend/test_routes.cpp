@@ -688,29 +688,62 @@ TEST_CASE("R-1: GET /access-logs accepts offset, returns {entries, total}") {
     CHECK(body["entries"].size() == 2);
 }
 
-TEST_CASE("GET /groups and /timezones expose name-only lists, including empty lists") {
-    for (const auto& route : {std::string("groups"), std::string("timezones")}) {
-        const auto object = route == "groups" ? "groups" : "time_zones";
-        for (const bool empty : {false, true}) {
-            CAPTURE(route); CAPTURE(empty);
-            TestServer server;
-            const auto rows = empty ? nlohmann::json::array() : nlohmann::json::array({
-                {{"id", 1}, {"name", "Staff"}}, {{"id", 2}, {"name", "Visitors"}}
-            });
-            int calls = 0;
-            server.fake().responder = [&](const HttpRequest& req) {
-                ++calls;
-                CHECK(req.path == "/load_objects.fcgi");
-                const nlohmann::json expected = {{"object", object}, {"fields", {"id", "name"}}};
-                CHECK(nlohmann::json::parse(req.body) == expected);
-                return FakeTransport::ok(nlohmann::json{{object, rows}}.dump());
-            };
-            auto cli = server.http();
-            auto res = cli.Get("/" + route);
-            REQUIRE(res != nullptr); CHECK(res->status == 200);
-            const nlohmann::json expected = {{route, rows}};
-            CHECK(nlohmann::json::parse(res->body) == expected);
-            CHECK(calls == 1);
+TEST_CASE("GET /timezones exposes a name-only list, including the empty case") {
+    for (const bool empty : {false, true}) {
+        CAPTURE(empty);
+        TestServer server;
+        const auto rows = empty ? nlohmann::json::array() : nlohmann::json::array({
+            {{"id", 1}, {"name", "Staff"}}, {{"id", 2}, {"name", "Visitors"}}
+        });
+        int calls = 0;
+        server.fake().responder = [&](const HttpRequest& req) {
+            ++calls;
+            CHECK(req.path == "/load_objects.fcgi");
+            const nlohmann::json expected = {{"object", "time_zones"}, {"fields", {"id", "name"}}};
+            CHECK(nlohmann::json::parse(req.body) == expected);
+            return FakeTransport::ok(nlohmann::json{{"time_zones", rows}}.dump());
+        };
+        auto cli = server.http();
+        auto res = cli.Get("/timezones");
+        REQUIRE(res != nullptr); CHECK(res->status == 200);
+        const nlohmann::json expected = {{"timezones", rows}};
+        CHECK(nlohmann::json::parse(res->body) == expected);
+        CHECK(calls == 1);
+    }
+}
+
+TEST_CASE("GET /groups exposes name + timeZoneIds per row, including the empty case") {
+    for (const bool empty : {false, true}) {
+        CAPTURE(empty);
+        TestServer server;
+        int groupsCalls = 0;
+        server.fake().responder = [&](const HttpRequest& req) -> HttpResponse {
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            if (body["object"] == "groups") {
+                ++groupsCalls;
+                const nlohmann::json expected = {{"object", "groups"}, {"fields", {"id", "name"}}};
+                CHECK(body == expected);
+                const auto rows = empty ? nlohmann::json::array() : nlohmann::json::array({
+                    {{"id", 1}, {"name", "Staff"}}, {{"id", 2}, {"name", "Visitors"}}
+                });
+                return FakeTransport::ok(nlohmann::json{{"groups", rows}}.dump());
+            }
+            // Per-row timeZoneIds lookup (2026-09-16-groups-timezones-write-side).
+            CHECK(body["object"] == "time_zones");
+            return FakeTransport::ok(nlohmann::json{{"time_zones", nlohmann::json::array()}}.dump());
+        };
+        auto cli = server.http();
+        auto res = cli.Get("/groups");
+        REQUIRE(res != nullptr); CHECK(res->status == 200);
+        nlohmann::json parsed = nlohmann::json::parse(res->body);
+        CHECK(groupsCalls == 1);
+        if (empty) {
+            CHECK(parsed == nlohmann::json{{"groups", nlohmann::json::array()}});
+        } else {
+            REQUIRE(parsed["groups"].size() == 2);
+            CHECK(parsed["groups"][0]["name"] == "Staff");
+            CHECK(parsed["groups"][0]["timeZoneIds"] == nlohmann::json::array());
+            CHECK(parsed["groups"][1]["name"] == "Visitors");
         }
     }
 }
@@ -753,6 +786,52 @@ TEST_CASE("T-3: DELETE /groups/:id success returns 200") {
     server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
     auto cli = server.http();
     auto res = cli.Delete("/groups/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("T-4: POST /groups/:id/timezones/:timeZoneId takes both ids from the path") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "group_access_rules") {
+            return FakeTransport::ok(nlohmann::json{{"group_access_rules", nlohmann::json::array({
+                {{"access_rule_id", 7}},
+            })}}.dump());
+        }
+        if (req.path == "/create_objects.fcgi" && object == "access_rule_time_zones") {
+            CHECK(body["values"][0]["access_rule_id"] == 7);
+            CHECK(body["values"][0]["time_zone_id"] == 5);
+            return FakeTransport::ok(R"({"ids":[10]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/groups/6/timezones/5", "", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("T-5: DELETE /groups/:id/timezones/:timeZoneId takes both ids from the path") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "group_access_rules") {
+            return FakeTransport::ok(nlohmann::json{{"group_access_rules", nlohmann::json::array({
+                {{"access_rule_id", 7}},
+            })}}.dump());
+        }
+        if (req.path == "/destroy_objects.fcgi" && object == "access_rule_time_zones") {
+            CHECK(body["where"][0]["value"] == 7);
+            CHECK(body["where"][1]["value"] == nlohmann::json::array({5}));
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Delete("/groups/6/timezones/5");
     REQUIRE(res != nullptr);
     CHECK(res->status == 200);
 }

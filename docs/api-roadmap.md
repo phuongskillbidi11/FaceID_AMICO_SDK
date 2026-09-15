@@ -115,11 +115,12 @@ scope cut, not an oversight.
 
 ---
 
-## 5. Groups (Enroll → Groups) — ✅ Implemented (read + write, 2026-09-15) — ⚠️ known gap found 2026-09-15
+## 5. Groups (Enroll → Groups) — ✅ Implemented (read + write + time zone linking, 2026-09-16)
 
-**Known gap found during Scheduled Unlock discovery (2026-09-15):**
-the real device's own Group Edit page has **3 tabs — General, Users,
-Time Zones —** but this project's shipped Groups write-side plan
+**Gap found during Scheduled Unlock discovery (2026-09-15), closed
+2026-09-16** (`.plans/2026-09-16-groups-timezones-write-side/`): the
+real device's own Group Edit page has **3 tabs — General, Users, Time
+Zones —** but this project's original Groups write-side plan
 (`fe1e4d9`) only implemented General (the `name` field). Confirmed
 live via `group.html`:
 - **"Users" tab — not a gap.** Same underlying `user_groups`
@@ -127,24 +128,19 @@ live via `group.html`:
   `UsersApi::addToGroup()`/`removeFromGroup()` (shipped, Users
   section). This tab is only an alternate UI surface (manage
   membership from the Group's own page instead of the User's) — a
-  possible frontend nicety, not a missing SDK/backend capability.
-- **"Time Zones" tab — a real gap.** Groups link to time zones through
-  the exact same `access_rules`/`access_rule_time_zones` mechanism
-  documented in section 10b for Scheduled Unlock (`class.js`'s
-  `groupsData.fields.time_zones`, client-side-only registration,
-  `intermediateTable: access_rule_time_zones`,
-  `intermediateTableBy: [portal_access_rules, group_access_rules]`).
-  The real device's own Groups list even has a "Nº of Time Zones"
-  column ("Everywhere": 1, "Standard": 0) that this project's `GET
-  /groups` response has no equivalent field for. **Not implemented at
-  all** in this project — no SDK type, no route, no frontend tab.
-  Given section 10b's Scheduled Unlock discovery already confirmed the
-  exact `create_objects.fcgi`/`destroy_objects.fcgi` shapes for the
-  underlying `access_rule_time_zones` link (just via
-  `group_access_rules` instead of `scheduled_unlock_access_rules` as
-  the other half of the join), this should be a fast follow-up once
-  Scheduled Unlock's own write side is planned/implemented, reusing
-  the same access_rules-linking pattern.
+  possible frontend nicety, not a missing SDK/backend capability. Not
+  implemented, not planned.
+- **"Time Zones" tab — now implemented.** Groups link to time zones
+  through the exact same `access_rules`/`access_rule_time_zones`
+  mechanism already shipped for Scheduled Unlock (section 10b), just
+  `group_access_rules` in place of `scheduled_unlock_access_rules` as
+  the other half of the join — confirmed byte-for-byte identical for
+  the shared steps via a second live discovery pass
+  (`.plans/2026-09-16-groups-timezones-write-side/spec.md`
+  Background). `GroupsApi` gained `addTimeZone()`/`removeTimeZone()`;
+  `GET /groups` now returns `timeZoneIds` per row; the real device's
+  own "Nº of Time Zones" list column is now mirrored in this project's
+  own Groups tab too.
 
 Device protocol `LIVE_CONFIRMED` (`docs/ui-action-protocol-map.md`
 "Groups" section): `object:"groups"`, `fields:["id","name"]`, same
@@ -157,6 +153,8 @@ list/count/pagination pattern as Users.
 | ✅ | `POST /groups` | `create_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15 via XHR-interceptor capture: `{"join":"LEFT","object":"groups","fields":["id","name"],"where":[],"order":["name"],"values":[{"name":"<name>"}]}` — same extended shape as Visits' own create, not Users' leaner shape. See `.plans/2026-09-15-groups-write-side/`. |
 | ✅ | `PATCH /groups/:id` | `modify_objects.fcgi` — built by symmetry with the shared `messenger.js` mechanism (same code path already `LIVE_CONFIRMED` for Users/Visits); independently live-confirmed for `groups` specifically in this plan's own Group 8 |
 | ✅ | `DELETE /groups/:id` | `destroy_objects.fcgi` — same confirmation status as `PATCH` above |
+| ✅ | `POST /groups/:id/timezones/:timeZoneId` | `create_objects.fcgi` against `access_rules`/`group_access_rules`/`access_rule_time_zones` as needed — `LIVE_CONFIRMED` 2026-09-16, same mechanism as Scheduled Unlock's own equivalent route |
+| ✅ | `DELETE /groups/:id/timezones/:timeZoneId` | `destroy_objects.fcgi` against `access_rule_time_zones` — `LIVE_CONFIRMED` 2026-09-16 |
 
 **Protected group id 1** ("Standard" on this device): the real UI's
 own `class.js` (`groupsData.noSave = [1]`) disables editing/removing
@@ -501,8 +499,8 @@ pass) confirms the real object names/fields/commands.
 ## Suggested next discovery pass
 
 Within **Enroll** specifically (the sidebar area this project has
-focused on so far — Users ✅, Visitors ✅, Groups ✅ (⚠️ known Time
-Zones tab gap, section 5), Time Zones ✅ (read+write, 2026-09-15),
+focused on so far — Users ✅, Visitors ✅, Groups ✅ (read+write+time
+zone linking, 2026-09-16), Time Zones ✅ (read+write, 2026-09-15),
 Visits ✅ implemented 2026-09-14, Holidays ✅ implemented 2026-09-15,
 Scheduled Unlock ✅ implemented 2026-09-15 — see sections 5/6/6b/6c/10b),
 the remaining items in the real device's own Enroll submenu, in
@@ -510,17 +508,12 @@ sidebar order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | Groups' own Time Zones tab | ⚠️ known gap (section 5) — reuses the same `access_rules`/`access_rule_time_zones` mechanism just confirmed/implemented for Scheduled Unlock; fast follow-up |
-| 2 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
-| 3 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
+| 1 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
+| 2 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
 
-**Recommended next single step:** Close the Groups Time Zones gap
-(row 1) — the exact `access_rules`/`access_rule_time_zones` link/
-unlink mechanism is already fully confirmed and implemented for
-Scheduled Unlock (section 10b); a Groups follow-up plan can reuse the
-same query builders/pattern, only swapping `scheduled_unlock_access_rules`
-for `group_access_rules` as the other half of the join. Otherwise,
-User Types per row 2 above is the next item needing a discovery pass.
+**Recommended next single step:** User Types (row 1) is the next item
+needing a discovery pass — everything else identified so far in
+Enroll is now implemented.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings

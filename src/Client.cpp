@@ -699,6 +699,21 @@ struct AmicoClient::Impl {
         return result;
     }
 
+    std::vector<int64_t> listGroupTimeZoneIds(int64_t groupId) {
+        nlohmann::json body = detail::buildGroupTimeZoneIdsBody(groupId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto timeZonesIt = response.find("time_zones");
+        if (timeZonesIt == response.end() || !timeZonesIt->is_array()) {
+            throw ProtocolError("missing required field 'time_zones' in response from /load_objects.fcgi");
+        }
+        std::vector<int64_t> result;
+        result.reserve(timeZonesIt->size());
+        for (const auto& row : *timeZonesIt) {
+            result.push_back(requireField<int64_t>(row, "id", "/load_objects.fcgi (time_zones by group)"));
+        }
+        return result;
+    }
+
     std::vector<Group> listGroups() {
         nlohmann::json body = detail::buildGroupsListBody();
         nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
@@ -712,6 +727,7 @@ struct AmicoClient::Impl {
             Group group;
             group.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (groups)");
             group.name = requireField<std::string>(row, "name", "/load_objects.fcgi (groups)");
+            group.timeZoneIds = listGroupTimeZoneIds(group.id);
             result.push_back(std::move(group));
         }
         return result;
@@ -740,6 +756,63 @@ struct AmicoClient::Impl {
 
     void removeGroup(int64_t id) {
         nlohmann::json body = detail::buildGroupDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
+    /// NOT independently live-captured (spec.md Decision 1, Risks) --
+    /// looks up the access_rule_id linked to a group, if any, via
+    /// group_access_rules.
+    std::optional<int64_t> findGroupAccessRuleId(int64_t groupId) {
+        nlohmann::json body = detail::buildGroupAccessRuleIdBody(groupId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("group_access_rules");
+        if (it == response.end() || !it->is_array()) {
+            throw ProtocolError("missing required field 'group_access_rules' in response from /load_objects.fcgi");
+        }
+        if (it->empty()) {
+            return std::nullopt;
+        }
+        return requireField<int64_t>(it->front(), "access_rule_id", "/load_objects.fcgi (group_access_rules)");
+    }
+
+    void addGroupTimeZone(int64_t groupId, int64_t timeZoneId) {
+        std::optional<int64_t> accessRuleId = findGroupAccessRuleId(groupId);
+        if (!accessRuleId.has_value()) {
+            nlohmann::json createBody = detail::buildGroupAccessRuleCreateBody(groupId);
+            nlohmann::json createResponse = postAuthenticatedJson("/create_objects.fcgi", createBody);
+            nlohmann::json ids = requireField<nlohmann::json>(createResponse, "ids", "/create_objects.fcgi");
+            if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+                throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+            }
+            accessRuleId = ids.front().get<int64_t>();
+
+            nlohmann::json linkBody = detail::buildGroupAccessRuleLinkBody(groupId, *accessRuleId);
+            nlohmann::json linkResponse = postAuthenticatedJson("/create_objects.fcgi", linkBody);
+            nlohmann::json linkIds = requireField<nlohmann::json>(linkResponse, "ids", "/create_objects.fcgi");
+            if (!linkIds.is_array() || linkIds.empty()) {
+                throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+            }
+        }
+
+        nlohmann::json tzBody = detail::buildAccessRuleTimeZoneLinkBody(*accessRuleId, timeZoneId);
+        nlohmann::json tzResponse = postAuthenticatedJson("/create_objects.fcgi", tzBody);
+        nlohmann::json tzIds = requireField<nlohmann::json>(tzResponse, "ids", "/create_objects.fcgi");
+        if (!tzIds.is_array() || tzIds.empty()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+    }
+
+    void removeGroupTimeZone(int64_t groupId, int64_t timeZoneId) {
+        std::optional<int64_t> accessRuleId = findGroupAccessRuleId(groupId);
+        if (!accessRuleId.has_value()) {
+            throw ProtocolError("group has no linked time zones to remove");
+        }
+        nlohmann::json body = detail::buildAccessRuleTimeZoneUnlinkBody(*accessRuleId, timeZoneId);
         nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
 
         nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
@@ -1332,6 +1405,8 @@ std::vector<Group> AmicoClient::listGroupsImpl() { return impl_->listGroups(); }
 int64_t AmicoClient::createGroupImpl(const NewGroup& group) { return impl_->createGroup(group); }
 void AmicoClient::updateGroupImpl(const GroupUpdate& group) { impl_->updateGroup(group); }
 void AmicoClient::removeGroupImpl(int64_t id) { impl_->removeGroup(id); }
+void AmicoClient::addGroupTimeZoneImpl(int64_t groupId, int64_t timeZoneId) { impl_->addGroupTimeZone(groupId, timeZoneId); }
+void AmicoClient::removeGroupTimeZoneImpl(int64_t groupId, int64_t timeZoneId) { impl_->removeGroupTimeZone(groupId, timeZoneId); }
 std::vector<TimeZone> AmicoClient::listTimeZonesImpl() { return impl_->listTimeZones(); }
 int64_t AmicoClient::createTimeZoneImpl(const NewTimeZone& zone) { return impl_->createTimeZone(zone); }
 void AmicoClient::updateTimeZoneImpl(const TimeZoneUpdate& zone) { impl_->updateTimeZone(zone); }
@@ -1392,6 +1467,8 @@ std::vector<Group> AmicoClient::GroupsApi::list() { return owner_->listGroupsImp
 int64_t AmicoClient::GroupsApi::create(const NewGroup& group) { return owner_->createGroupImpl(group); }
 void AmicoClient::GroupsApi::update(const GroupUpdate& group) { owner_->updateGroupImpl(group); }
 void AmicoClient::GroupsApi::remove(int64_t id) { owner_->removeGroupImpl(id); }
+void AmicoClient::GroupsApi::addTimeZone(int64_t groupId, int64_t timeZoneId) { owner_->addGroupTimeZoneImpl(groupId, timeZoneId); }
+void AmicoClient::GroupsApi::removeTimeZone(int64_t groupId, int64_t timeZoneId) { owner_->removeGroupTimeZoneImpl(groupId, timeZoneId); }
 std::vector<TimeZone> AmicoClient::TimeZonesApi::list() { return owner_->listTimeZonesImpl(); }
 int64_t AmicoClient::TimeZonesApi::create(const NewTimeZone& zone) { return owner_->createTimeZoneImpl(zone); }
 void AmicoClient::TimeZonesApi::update(const TimeZoneUpdate& zone) { owner_->updateTimeZoneImpl(zone); }
