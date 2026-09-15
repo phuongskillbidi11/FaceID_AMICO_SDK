@@ -11,6 +11,16 @@ nlohmann::json toJson(const amico::TimeZone& timeZone) {
     return {{"id", timeZone.id}, {"name", timeZone.name}};
 }
 
+nlohmann::json toJson(const amico::TimeSpan& span) {
+    return {
+        {"id", span.id}, {"timeZoneId", span.timeZoneId},
+        {"start", span.start}, {"end", span.end},
+        {"sun", span.sun}, {"mon", span.mon}, {"tue", span.tue}, {"wed", span.wed},
+        {"thu", span.thu}, {"fri", span.fri}, {"sat", span.sat},
+        {"hol1", span.hol1}, {"hol2", span.hol2}, {"hol3", span.hol3},
+    };
+}
+
 nlohmann::json toJson(const amico::AmicoUser& user) {
     nlohmann::json j;
     j["id"] = user.id;
@@ -161,6 +171,54 @@ amico::GroupUpdate fromJsonGroupUpdate(int64_t id, const nlohmann::json& body) {
     amico::GroupUpdate update;
     update.id = id;
     update.name = body.at("name").get<std::string>();
+    return update;
+}
+
+amico::NewTimeZone fromJsonNewTimeZone(const nlohmann::json& body) {
+    amico::NewTimeZone zone;
+    zone.name = body.at("name").get<std::string>();
+    return zone;
+}
+
+amico::TimeZoneUpdate fromJsonTimeZoneUpdate(int64_t id, const nlohmann::json& body) {
+    amico::TimeZoneUpdate update;
+    update.id = id;
+    update.name = body.at("name").get<std::string>();
+    return update;
+}
+
+namespace {
+// This object has no meaningful partial update -- the frontend always
+// sends the full current+edited set of 12 fields, same reasoning as
+// Groups' `name`.
+template <typename T>
+void readTimeSpanFields(T& span, const nlohmann::json& body) {
+    span.start = body.at("start").get<int64_t>();
+    span.end = body.at("end").get<int64_t>();
+    span.sun = body.at("sun").get<bool>();
+    span.mon = body.at("mon").get<bool>();
+    span.tue = body.at("tue").get<bool>();
+    span.wed = body.at("wed").get<bool>();
+    span.thu = body.at("thu").get<bool>();
+    span.fri = body.at("fri").get<bool>();
+    span.sat = body.at("sat").get<bool>();
+    span.hol1 = body.at("hol1").get<bool>();
+    span.hol2 = body.at("hol2").get<bool>();
+    span.hol3 = body.at("hol3").get<bool>();
+}
+}  // namespace
+
+amico::NewTimeSpan fromJsonNewTimeSpan(int64_t timeZoneId, const nlohmann::json& body) {
+    amico::NewTimeSpan span;
+    span.timeZoneId = timeZoneId;
+    readTimeSpanFields(span, body);
+    return span;
+}
+
+amico::TimeSpanUpdate fromJsonTimeSpanUpdate(int64_t id, const nlohmann::json& body) {
+    amico::TimeSpanUpdate update;
+    update.id = id;
+    readTimeSpanFields(update, body);
     return update;
 }
 

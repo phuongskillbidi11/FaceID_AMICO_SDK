@@ -514,6 +514,50 @@ An empty list returns `{"timezones": []}`. The SDK requests only `id` and
 `name` from `time_zones`. Both lookup routes return `401` without a valid
 session and use the standard backend error mapping for device failures.
 
+### `POST /timezones`
+Body: `{"name": "<time zone name>"}`. `201 {"id": <new time zone id>}`.
+
+### `PATCH /timezones/:id`
+Body: `{"name": "<new name>"}` — same "no meaningful partial update"
+reasoning as `/groups`. `200 {"success": true}`.
+
+### `DELETE /timezones/:id`
+`200 {"success": true}`. Also removes the zone's `time_spans` device-
+side (unconfirmed whether the device cascades this on its own or the
+spans are simply orphaned — not independently tested).
+
+**Protected time zone note:** same as Groups — the real device's own
+web UI disables editing/removing whichever time zone has id 1 on this
+device (a built-in default, "Always Allowed" — `class.js`'s
+`noSave:[1]`). This backend does not replicate that restriction
+server-side.
+
+### `GET /timezones/:id/spans`
+Session required. Lists every `time_spans` row for one time zone.
+`200` response:
+```json
+{"spans": [{"id": 1, "timeZoneId": 1, "start": 0, "end": 86399,
+  "sun": true, "mon": true, "tue": true, "wed": true, "thu": true,
+  "fri": true, "sat": true, "hol1": true, "hol2": true, "hol3": true}]}
+```
+`start`/`end` are seconds-since-midnight (e.g. `0` = 00:00:00,
+`86399` = 23:59:59). `sun`..`sat`/`hol1`..`hol3` are booleans — which
+days of the week and which of the device's 3 holiday categories this
+span applies to.
+
+### `POST /timezones/:id/spans`
+Body: all 12 `time_spans` fields except `id` (`start`, `end`,
+`sun`..`sat`, `hol1`..`hol3`) — the time zone id comes from the URL,
+never from the body. `201 {"id": <new span id>}`.
+
+### `PATCH /timespans/:id`
+Top-level by the span's own id (not nested under a time zone id —
+same precedent as `DELETE /cards/:cardId`). Body: the same 12 fields
+as create (no meaningful partial update). `200 {"success": true}`.
+
+### `DELETE /timespans/:id`
+`200 {"success": true}`.
+
 ### `GET /access-logs?from=&to=&limit=&offset=&userIds=&groupIds=&timeZoneIds=`
 Session required. Optional `userIds`, `groupIds`, and `timeZoneIds` accept
 signed 64-bit integer IDs, comma-separated and/or repeated. For example:

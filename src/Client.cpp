@@ -61,6 +61,21 @@ T requireField(const nlohmann::json& j, const char* key, const std::string& path
     }
 }
 
+/// Reads a boolean-ish field as either a real JSON boolean or a 0/1
+/// integer -- the device's own `time_spans` (and `visits.finished`,
+/// mapVisit's own precedent) returns these as plain 0/1 integers, not
+/// JSON true/false, so a strict requireField<bool>() would wrongly
+/// throw ProtocolError on every real response.
+bool requireBoolLikeField(const nlohmann::json& j, const char* key, const std::string& path) {
+    auto it = j.find(key);
+    if (it == j.end() || it->is_null()) {
+        throw ProtocolError(std::string("missing required field '") + key + "' in response from " + path);
+    }
+    if (it->is_boolean()) return it->get<bool>();
+    if (it->is_number_integer()) return it->get<int64_t>() != 0;
+    throw ProtocolError(std::string("field '") + key + "' had an unexpected type in response from " + path);
+}
+
 }  // namespace
 
 struct AmicoClient::Impl {
@@ -751,6 +766,102 @@ struct AmicoClient::Impl {
         return result;
     }
 
+    int64_t createTimeZone(const NewTimeZone& zone) {
+        nlohmann::json body = detail::buildTimeZoneCreateBody(zone.name);
+        nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
+
+        nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
+        if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        return ids.front().get<int64_t>();
+    }
+
+    void updateTimeZone(const TimeZoneUpdate& zone) {
+        nlohmann::json body = detail::buildTimeZoneUpdateBody(zone.id, zone.name);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeTimeZone(int64_t id) {
+        nlohmann::json body = detail::buildTimeZoneDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
+    TimeSpan mapTimeSpan(const nlohmann::json& row) {
+        TimeSpan span;
+        span.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (time_spans)");
+        span.timeZoneId = requireField<int64_t>(row, "time_zone_id", "/load_objects.fcgi (time_spans)");
+        span.start = requireField<int64_t>(row, "start", "/load_objects.fcgi (time_spans)");
+        span.end = requireField<int64_t>(row, "end", "/load_objects.fcgi (time_spans)");
+        span.sun = requireBoolLikeField(row, "sun", "/load_objects.fcgi (time_spans)");
+        span.mon = requireBoolLikeField(row, "mon", "/load_objects.fcgi (time_spans)");
+        span.tue = requireBoolLikeField(row, "tue", "/load_objects.fcgi (time_spans)");
+        span.wed = requireBoolLikeField(row, "wed", "/load_objects.fcgi (time_spans)");
+        span.thu = requireBoolLikeField(row, "thu", "/load_objects.fcgi (time_spans)");
+        span.fri = requireBoolLikeField(row, "fri", "/load_objects.fcgi (time_spans)");
+        span.sat = requireBoolLikeField(row, "sat", "/load_objects.fcgi (time_spans)");
+        span.hol1 = requireBoolLikeField(row, "hol1", "/load_objects.fcgi (time_spans)");
+        span.hol2 = requireBoolLikeField(row, "hol2", "/load_objects.fcgi (time_spans)");
+        span.hol3 = requireBoolLikeField(row, "hol3", "/load_objects.fcgi (time_spans)");
+        return span;
+    }
+
+    std::vector<TimeSpan> listTimeSpans(int64_t timeZoneId) {
+        nlohmann::json body = detail::buildTimeSpansListBody(timeZoneId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto spansIt = response.find("time_spans");
+        if (spansIt == response.end() || !spansIt->is_array()) {
+            throw ProtocolError("missing required field 'time_spans' in response from /load_objects.fcgi");
+        }
+        std::vector<TimeSpan> result;
+        result.reserve(spansIt->size());
+        for (const auto& row : *spansIt) {
+            result.push_back(mapTimeSpan(row));
+        }
+        return result;
+    }
+
+    int64_t createTimeSpan(const NewTimeSpan& span) {
+        nlohmann::json body = detail::buildTimeSpanCreateBody(span);
+        nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
+
+        nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
+        if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        return ids.front().get<int64_t>();
+    }
+
+    void updateTimeSpan(const TimeSpanUpdate& span) {
+        nlohmann::json body = detail::buildTimeSpanUpdateBody(span);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeTimeSpan(int64_t id) {
+        nlohmann::json body = detail::buildTimeSpanDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
     /// Resolves the 2-hop time-zone join for a batch of access_log ids
     /// (spec.md Decision 2b). Tie-break: the first row encountered at
     /// each hop wins -- deterministic, not arbitrary; matches every row
@@ -1034,6 +1145,13 @@ int64_t AmicoClient::createGroupImpl(const NewGroup& group) { return impl_->crea
 void AmicoClient::updateGroupImpl(const GroupUpdate& group) { impl_->updateGroup(group); }
 void AmicoClient::removeGroupImpl(int64_t id) { impl_->removeGroup(id); }
 std::vector<TimeZone> AmicoClient::listTimeZonesImpl() { return impl_->listTimeZones(); }
+int64_t AmicoClient::createTimeZoneImpl(const NewTimeZone& zone) { return impl_->createTimeZone(zone); }
+void AmicoClient::updateTimeZoneImpl(const TimeZoneUpdate& zone) { impl_->updateTimeZone(zone); }
+void AmicoClient::removeTimeZoneImpl(int64_t id) { impl_->removeTimeZone(id); }
+std::vector<TimeSpan> AmicoClient::listTimeSpansImpl(int64_t timeZoneId) { return impl_->listTimeSpans(timeZoneId); }
+int64_t AmicoClient::createTimeSpanImpl(const NewTimeSpan& span) { return impl_->createTimeSpan(span); }
+void AmicoClient::updateTimeSpanImpl(const TimeSpanUpdate& span) { impl_->updateTimeSpan(span); }
+void AmicoClient::removeTimeSpanImpl(int64_t id) { impl_->removeTimeSpan(id); }
 std::map<int64_t, std::string> AmicoClient::timeZoneNamesForAccessLogIdsImpl(const std::vector<int64_t>& accessLogIds) {
     return impl_->timeZoneNamesForAccessLogIds(accessLogIds);
 }
@@ -1073,6 +1191,13 @@ int64_t AmicoClient::GroupsApi::create(const NewGroup& group) { return owner_->c
 void AmicoClient::GroupsApi::update(const GroupUpdate& group) { owner_->updateGroupImpl(group); }
 void AmicoClient::GroupsApi::remove(int64_t id) { owner_->removeGroupImpl(id); }
 std::vector<TimeZone> AmicoClient::TimeZonesApi::list() { return owner_->listTimeZonesImpl(); }
+int64_t AmicoClient::TimeZonesApi::create(const NewTimeZone& zone) { return owner_->createTimeZoneImpl(zone); }
+void AmicoClient::TimeZonesApi::update(const TimeZoneUpdate& zone) { owner_->updateTimeZoneImpl(zone); }
+void AmicoClient::TimeZonesApi::remove(int64_t id) { owner_->removeTimeZoneImpl(id); }
+std::vector<TimeSpan> AmicoClient::TimeZonesApi::listSpans(int64_t timeZoneId) { return owner_->listTimeSpansImpl(timeZoneId); }
+int64_t AmicoClient::TimeZonesApi::createSpan(const NewTimeSpan& span) { return owner_->createTimeSpanImpl(span); }
+void AmicoClient::TimeZonesApi::updateSpan(const TimeSpanUpdate& span) { owner_->updateTimeSpanImpl(span); }
+void AmicoClient::TimeZonesApi::removeSpan(int64_t id) { owner_->removeTimeSpanImpl(id); }
 std::map<int64_t, std::string> AmicoClient::AccessLogsApi::timeZoneNamesForAccessLogIds(const std::vector<int64_t>& accessLogIds) {
     return owner_->timeZoneNamesForAccessLogIdsImpl(accessLogIds);
 }

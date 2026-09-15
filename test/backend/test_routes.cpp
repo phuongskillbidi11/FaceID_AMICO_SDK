@@ -757,6 +757,103 @@ TEST_CASE("T-3: DELETE /groups/:id success returns 200") {
     CHECK(res->status == 200);
 }
 
+TEST_CASE("U-1: POST /timezones creates a time zone and returns the new id") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "time_zones") {
+            CHECK(body["values"][0]["name"] == "ZZ_TimeZoneTest");
+            return FakeTransport::ok(R"({"ids":[7]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/timezones", R"({"name":"ZZ_TimeZoneTest"})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 7);
+}
+
+TEST_CASE("U-2: PATCH /timezones/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Patch("/timezones/1", R"({"name":"Renamed"})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("U-3: DELETE /timezones/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/timezones/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("U-4: GET /timezones/:id/spans returns the spans list") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        CHECK(body["where"] == nlohmann::json{{"time_spans", {{"time_zone_id", 1}}}});
+        return FakeTransport::ok(nlohmann::json{{"time_spans", nlohmann::json::array({{
+            {"id", 1}, {"time_zone_id", 1}, {"start", 0}, {"end", 86399},
+            {"sun", 1}, {"mon", 1}, {"tue", 1}, {"wed", 1}, {"thu", 1}, {"fri", 1}, {"sat", 1},
+            {"hol1", 1}, {"hol2", 1}, {"hol3", 1},
+        }})}}.dump());
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/timezones/1/spans");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    CHECK(nlohmann::json::parse(res->body)["spans"].size() == 1);
+}
+
+TEST_CASE("U-5: POST /timezones/:id/spans takes the zone id from the path, not the body") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "time_spans") {
+            CHECK(body["values"][0]["time_zone_id"] == 3);
+            CHECK(body["values"][0]["start"] == 8 * 3600);
+            return FakeTransport::ok(R"({"ids":[9]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/timezones/3/spans",
+        R"({"start":28800,"end":64800,"sun":false,"mon":true,"tue":true,"wed":true,"thu":true,"fri":true,"sat":false,"hol1":false,"hol2":false,"hol3":false})",
+        "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 9);
+}
+
+TEST_CASE("U-6: PATCH /timespans/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        CHECK_FALSE(body["values"].contains("time_zone_id"));
+        return FakeTransport::ok(R"({"changes": 1})");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/timespans/9",
+        R"({"start":0,"end":86399,"sun":true,"mon":true,"tue":true,"wed":true,"thu":true,"fri":true,"sat":true,"hol1":true,"hol2":true,"hol3":true})",
+        "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("U-7: DELETE /timespans/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/timespans/9");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);

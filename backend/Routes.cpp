@@ -983,6 +983,151 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
             respondError(res, e);
         }
     });
+    // Time Zones write side + time_spans CRUD
+    // (2026-09-15-timezones-write-side) -- same no-special-casing
+    // stance for the protected default zone id as Groups (spec.md
+    // Decision 3).
+    svr.Post("/timezones", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewTimeZone newZone;
+        try {
+            newZone = fromJsonNewTimeZone(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.timeZones().create(newZone);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Patch(R"(/timezones/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::TimeZoneUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonTimeZoneUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.timeZones().update(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/timezones/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.timeZones().remove(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Get(R"(/timezones/(\d+)/spans)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t timeZoneId = 0;
+        try {
+            timeZoneId = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& span : client.timeZones().listSpans(timeZoneId)) rows.push_back(toJson(span));
+            res.set_content(nlohmann::json{{"spans", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post(R"(/timezones/(\d+)/spans)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewTimeSpan newSpan;
+        try {
+            int64_t timeZoneId = std::stoll(req.matches[1]);
+            newSpan = fromJsonNewTimeSpan(timeZoneId, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.timeZones().createSpan(newSpan);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    // Top-level by the span's own id, not nested under a zone id --
+    // same precedent as DELETE /cards/:cardId.
+    svr.Patch(R"(/timespans/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::TimeSpanUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonTimeSpanUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.timeZones().updateSpan(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/timespans/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.timeZones().removeSpan(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/access-logs", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

@@ -207,11 +207,32 @@ public:
         AmicoClient* owner_;
     };
 
-    /// Typed wrapper over the internal load_objects.fcgi query engine for
-    /// the `time_zones` object.
+    /// Typed read/write wrapper for the `time_zones` object, plus its
+    /// owned `time_spans` (Time Zones write-side plan, 2026-09-15) --
+    /// a time span only ever exists in the context of a time zone, same
+    /// ownership precedent as UsersApi owning card management.
     class TimeZonesApi {
     public:
         std::vector<TimeZone> list();
+
+        /// POST /create_objects.fcgi. Returns the device-assigned time zone id.
+        int64_t create(const NewTimeZone& zone);
+        /// POST /modify_objects.fcgi. Throws ProtocolError if no zone changed.
+        void update(const TimeZoneUpdate& zone);
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if no zone
+        /// removed. Does not special-case any zone id (including the
+        /// real UI's own protected id-1 default zone) -- same reasoning
+        /// as GroupsApi::remove().
+        void remove(int64_t id);
+
+        /// POST /load_objects.fcgi against `time_spans`, filtered to one zone.
+        std::vector<TimeSpan> listSpans(int64_t timeZoneId);
+        /// POST /create_objects.fcgi. Returns the device-assigned span id.
+        int64_t createSpan(const NewTimeSpan& span);
+        /// POST /modify_objects.fcgi. Throws ProtocolError if no span changed.
+        void updateSpan(const TimeSpanUpdate& span);
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if no span removed.
+        void removeSpan(int64_t id);
 
     private:
         friend class AmicoClient;
@@ -310,6 +331,13 @@ private:
     void updateGroupImpl(const GroupUpdate& group);
     void removeGroupImpl(int64_t id);
     std::vector<TimeZone> listTimeZonesImpl();
+    int64_t createTimeZoneImpl(const NewTimeZone& zone);
+    void updateTimeZoneImpl(const TimeZoneUpdate& zone);
+    void removeTimeZoneImpl(int64_t id);
+    std::vector<TimeSpan> listTimeSpansImpl(int64_t timeZoneId);
+    int64_t createTimeSpanImpl(const NewTimeSpan& span);
+    void updateTimeSpanImpl(const TimeSpanUpdate& span);
+    void removeTimeSpanImpl(int64_t id);
     std::map<int64_t, std::string> timeZoneNamesForAccessLogIdsImpl(const std::vector<int64_t>& accessLogIds);
     std::vector<Visit> listVisitsImpl(const VisitQuery& query);
     std::optional<Visit> getVisitImpl(int64_t id);

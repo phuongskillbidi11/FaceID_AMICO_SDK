@@ -334,3 +334,26 @@ TEST_CASE("Q-12 (Groups write-side plan, 2026-09-15): no new groups builder acce
     CHECK(detail::buildGroupUpdateBody(1, "Test")["object"] == "groups");
     CHECK(detail::buildGroupDeleteBody(1)["object"] == "groups");
 }
+
+TEST_CASE("Q-13 (Time Zones write-side plan, 2026-09-15): no new time_zones/time_spans builder accepts a caller-supplied object/field/connector string") {
+    // buildTimeZoneCreateBody/UpdateBody/DeleteBody and
+    // buildTimeSpansListBody/buildTimeSpanCreateBody/UpdateBody/DeleteBody
+    // (ObjectQuery.hpp) all take only int64_t/std::string/bool VALUE
+    // parameters (or a NewTimeSpan/TimeSpanUpdate struct of same) --
+    // never a field/object/connector name. Compile-time fact verified
+    // by their signatures; no runtime assertion is meaningful here
+    // (same pattern as "scenario 18"/Q-9/Q-12 above).
+    CHECK(detail::buildTimeZoneCreateBody("Test")["object"] == "time_zones");
+    CHECK(detail::buildTimeZoneUpdateBody(1, "Test")["object"] == "time_zones");
+    CHECK(detail::buildTimeZoneDeleteBody(1)["object"] == "time_zones");
+    CHECK(detail::buildTimeSpansListBody(1)["object"] == "time_spans");
+}
+
+TEST_CASE("Q-14: kTimeSpanFields never includes password/salt/panic_password/panic_salt") {
+    for (const auto& field : detail::kTimeSpanFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
+}

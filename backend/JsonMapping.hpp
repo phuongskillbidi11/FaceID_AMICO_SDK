@@ -15,6 +15,7 @@ namespace amico::backend {
 
 nlohmann::json toJson(const amico::Group& group);
 nlohmann::json toJson(const amico::TimeZone& timeZone);
+nlohmann::json toJson(const amico::TimeSpan& span);
 nlohmann::json toJson(const amico::AmicoUser& user);
 nlohmann::json toJson(const amico::AccessLogEntry& entry);
 nlohmann::json toJson(const amico::AccessLogEntry& entry,
@@ -39,5 +40,9 @@ amico::NewVisit fromJsonNewVisit(const nlohmann::json& body);
 amico::VisitUpdate fromJsonVisitUpdate(int64_t id, const nlohmann::json& body);
 amico::NewGroup fromJsonNewGroup(const nlohmann::json& body);
 amico::GroupUpdate fromJsonGroupUpdate(int64_t id, const nlohmann::json& body);
+amico::NewTimeZone fromJsonNewTimeZone(const nlohmann::json& body);
+amico::TimeZoneUpdate fromJsonTimeZoneUpdate(int64_t id, const nlohmann::json& body);
+amico::NewTimeSpan fromJsonNewTimeSpan(int64_t timeZoneId, const nlohmann::json& body);
+amico::TimeSpanUpdate fromJsonTimeSpanUpdate(int64_t id, const nlohmann::json& body);
 
 }  // namespace amico::backend

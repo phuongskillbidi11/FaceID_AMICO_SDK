@@ -214,10 +214,84 @@ struct Portal {
 };
 
 /// Public view of the `time_zones` object (name only — same
-/// rationale as Portal).
+/// rationale as Portal). Create/update/remove added by the
+/// 2026-09-15-timezones-write-side plan -- see `NewTimeZone`/
+/// `TimeZoneUpdate`/`TimeSpan` below.
 struct TimeZone {
     int64_t id = 0;
     std::string name;
+};
+
+/// Creation parameters for the `time_zones` object. LIVE_CONFIRMED
+/// 2026-09-15 via XHR-interceptor capture of the real device's own Add
+/// Time Zone form -- see
+/// .plans/2026-09-15-timezones-write-side/spec.md Background.
+struct NewTimeZone {
+    std::string name;
+};
+
+/// Update parameters for the `time_zones` object. `name` is the only
+/// writable field on the zone record itself (its `time_spans` are a
+/// separate nested object, see below).
+struct TimeZoneUpdate {
+    int64_t id = 0;
+    std::string name;
+};
+
+/// Public view of the `time_spans` object -- one day/time/holiday rule
+/// belonging to a time zone. `start`/`end` are seconds-since-midnight
+/// (e.g. 0 = 00:00:00, 86399 = 23:59:59).
+struct TimeSpan {
+    int64_t id = 0;
+    int64_t timeZoneId = 0;
+    int64_t start = 0;
+    int64_t end = 86399;
+    bool sun = true;
+    bool mon = true;
+    bool tue = true;
+    bool wed = true;
+    bool thu = true;
+    bool fri = true;
+    bool sat = true;
+    bool hol1 = true;
+    bool hol2 = true;
+    bool hol3 = true;
+};
+
+/// Creation parameters for the `time_spans` object.
+struct NewTimeSpan {
+    int64_t timeZoneId = 0;
+    int64_t start = 0;
+    int64_t end = 86399;
+    bool sun = true;
+    bool mon = true;
+    bool tue = true;
+    bool wed = true;
+    bool thu = true;
+    bool fri = true;
+    bool sat = true;
+    bool hol1 = true;
+    bool hol2 = true;
+    bool hol3 = true;
+};
+
+/// Update parameters for the `time_spans` object. `timeZoneId` is
+/// absent -- a span never changes which zone it belongs to in this
+/// plan's scope.
+struct TimeSpanUpdate {
+    int64_t id = 0;
+    int64_t start = 0;
+    int64_t end = 86399;
+    bool sun = true;
+    bool mon = true;
+    bool tue = true;
+    bool wed = true;
+    bool thu = true;
+    bool fri = true;
+    bool sat = true;
+    bool hol1 = true;
+    bool hol2 = true;
+    bool hol3 = true;
 };
 
 /// Public view of the `groups` object (name only — same minimal-

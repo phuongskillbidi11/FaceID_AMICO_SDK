@@ -26,6 +26,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include "amico/Types.hpp"
+
 namespace amico::detail {
 
 /// GET-listing body for the Users page's confirmed default filter
@@ -74,6 +76,40 @@ nlohmann::json buildGroupUpdateBody(int64_t id, const std::string& name);
 /// Single-group deletion body for `destroy_objects.fcgi`. Same
 /// not-yet-independently-confirmed caveat as buildGroupUpdateBody.
 nlohmann::json buildGroupDeleteBody(int64_t id);
+
+/// Single-time-zone creation body for `create_objects.fcgi`.
+/// LIVE_CONFIRMED wire shape 2026-09-15 via XHR-interceptor capture
+/// (.plans/2026-09-15-timezones-write-side/spec.md Background): same
+/// extended shape as buildGroupCreateBody/buildVisitCreateBody.
+nlohmann::json buildTimeZoneCreateBody(const std::string& name);
+
+/// Single-time-zone rename body for `modify_objects.fcgi`. NOT
+/// independently live-captured -- built by symmetry with
+/// buildGroupUpdateBody. Confirm during this plan's own Group 8 live
+/// check.
+nlohmann::json buildTimeZoneUpdateBody(int64_t id, const std::string& name);
+
+/// Single-time-zone deletion body for `destroy_objects.fcgi`. Same
+/// not-yet-independently-confirmed caveat as buildTimeZoneUpdateBody.
+nlohmann::json buildTimeZoneDeleteBody(int64_t id);
+
+/// Lists every `time_spans` row for one time zone.
+nlohmann::json buildTimeSpansListBody(int64_t timeZoneId);
+
+/// Single-time-span creation body for `create_objects.fcgi`. NOT
+/// independently live-captured -- built by symmetry with the confirmed
+/// extended create shape (join/fields/where/order + values) and
+/// `kTimeSpanFields`. Confirm during this plan's own Group 8 live
+/// check.
+nlohmann::json buildTimeSpanCreateBody(const NewTimeSpan& span);
+
+/// Single-time-span update body for `modify_objects.fcgi`. Same
+/// not-yet-independently-confirmed caveat as buildTimeSpanCreateBody.
+nlohmann::json buildTimeSpanUpdateBody(const TimeSpanUpdate& span);
+
+/// Single-time-span deletion body for `destroy_objects.fcgi`. Same
+/// caveat.
+nlohmann::json buildTimeSpanDeleteBody(int64_t id);
 
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
@@ -296,5 +332,6 @@ extern const std::vector<std::string> kUserGroupWritableFields;
 extern const std::vector<std::string> kCardWritableFields;
 extern const std::vector<std::string> kUserRoleWritableFields;
 extern const std::vector<std::string> kVisitFields;
+extern const std::vector<std::string> kTimeSpanFields;
 
 }  // namespace amico::detail

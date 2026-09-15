@@ -30,6 +30,12 @@ const std::vector<std::string> kVisitFields = {
     "id", "visitor_id", "host_id", "begin_time", "end_time", "finished",
 };
 
+const std::vector<std::string> kTimeSpanFields = {
+    "id", "time_zone_id", "start", "end",
+    "sun", "mon", "tue", "wed", "thu", "fri", "sat",
+    "hol1", "hol2", "hol3",
+};
+
 nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
     nlohmann::json body;
     body["join"] = "LEFT";
@@ -162,6 +168,104 @@ nlohmann::json buildTimeZonesListBody() {
     nlohmann::json body;
     body["object"] = "time_zones";
     body["fields"] = nlohmann::json::array({"id", "name"});
+    return body;
+}
+
+nlohmann::json buildTimeZoneCreateBody(const std::string& name) {
+    // Verbatim shape captured live 2026-09-15 -- same extended shape
+    // as buildGroupCreateBody/buildVisitCreateBody.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "time_zones";
+    body["fields"] = nlohmann::json::array({"id", "name"});
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"name"});
+    body["values"] = nlohmann::json::array({{{"name", name}}});
+    return body;
+}
+
+nlohmann::json buildTimeZoneUpdateBody(int64_t id, const std::string& name) {
+    nlohmann::json body;
+    body["object"] = "time_zones";
+    body["values"] = {{"name", name}};
+    body["where"] = {{"time_zones", {{"id", id}}}};
+    return body;
+}
+
+nlohmann::json buildTimeZoneDeleteBody(int64_t id) {
+    nlohmann::json body;
+    body["object"] = "time_zones";
+    body["where"] = {{"time_zones", {{"id", nlohmann::json::array({id})}}}};
+    return body;
+}
+
+nlohmann::json buildTimeSpansListBody(int64_t timeZoneId) {
+    nlohmann::json body;
+    body["object"] = "time_spans";
+    body["fields"] = kTimeSpanFields;
+    body["where"] = {{"time_spans", {{"time_zone_id", timeZoneId}}}};
+    return body;
+}
+
+namespace {
+// LIVE_CONFIRMED 2026-09-15: the device rejects a real JSON boolean
+// here with `{"error":"Invalid member 'sun' (int expected, got
+// boolean)","code":1}` -- it wants a plain 0/1 integer, matching its
+// own read-side behavior (mapTimeSpan's requireBoolLikeField, Client.cpp)
+// which already reads these back as 0/1 integers, not JSON booleans.
+int boolToDeviceInt(bool value) { return value ? 1 : 0; }
+
+nlohmann::json timeSpanValues(int64_t timeZoneId, int64_t start, int64_t end,
+                               bool sun, bool mon, bool tue, bool wed, bool thu, bool fri, bool sat,
+                               bool hol1, bool hol2, bool hol3) {
+    return {
+        {"time_zone_id", timeZoneId}, {"start", start}, {"end", end},
+        {"sun", boolToDeviceInt(sun)}, {"mon", boolToDeviceInt(mon)}, {"tue", boolToDeviceInt(tue)},
+        {"wed", boolToDeviceInt(wed)}, {"thu", boolToDeviceInt(thu)}, {"fri", boolToDeviceInt(fri)},
+        {"sat", boolToDeviceInt(sat)},
+        {"hol1", boolToDeviceInt(hol1)}, {"hol2", boolToDeviceInt(hol2)}, {"hol3", boolToDeviceInt(hol3)},
+    };
+}
+}  // namespace
+
+nlohmann::json buildTimeSpanCreateBody(const NewTimeSpan& span) {
+    // Not independently live-captured -- built by symmetry with the
+    // confirmed extended create shape (join/fields/where/order +
+    // values), using kTimeSpanFields.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "time_spans";
+    body["fields"] = kTimeSpanFields;
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"start"});
+    body["values"] = nlohmann::json::array({
+        timeSpanValues(span.timeZoneId, span.start, span.end,
+                        span.sun, span.mon, span.tue, span.wed, span.thu, span.fri, span.sat,
+                        span.hol1, span.hol2, span.hol3),
+    });
+    return body;
+}
+
+nlohmann::json buildTimeSpanUpdateBody(const TimeSpanUpdate& span) {
+    nlohmann::json body;
+    body["object"] = "time_spans";
+    // time_zone_id is deliberately never included -- a span never
+    // changes which zone it belongs to in this plan's scope.
+    body["values"] = {
+        {"start", span.start}, {"end", span.end},
+        {"sun", boolToDeviceInt(span.sun)}, {"mon", boolToDeviceInt(span.mon)}, {"tue", boolToDeviceInt(span.tue)},
+        {"wed", boolToDeviceInt(span.wed)}, {"thu", boolToDeviceInt(span.thu)}, {"fri", boolToDeviceInt(span.fri)},
+        {"sat", boolToDeviceInt(span.sat)},
+        {"hol1", boolToDeviceInt(span.hol1)}, {"hol2", boolToDeviceInt(span.hol2)}, {"hol3", boolToDeviceInt(span.hol3)},
+    };
+    body["where"] = {{"time_spans", {{"id", span.id}}}};
+    return body;
+}
+
+nlohmann::json buildTimeSpanDeleteBody(int64_t id) {
+    nlohmann::json body;
+    body["object"] = "time_spans";
+    body["where"] = {{"time_spans", {{"id", nlohmann::json::array({id})}}}};
     return body;
 }
 

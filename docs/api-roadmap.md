@@ -137,7 +137,7 @@ client-side-only restriction as far as confirmed; the implementation
 does not replicate it server-side (see spec.md Decision 2) — only the
 frontend mirrors it defensively.
 
-## 6. Time Zones (Enroll → Time Zones) — read ✅ Implemented, write 📋 Planned
+## 6. Time Zones (Enroll → Time Zones) — ✅ Implemented (read + write, 2026-09-15)
 
 `LIVE_CONFIRMED`: two device objects —
 `object:"time_zones"` (`fields:["id","name"]`) and
@@ -146,15 +146,20 @@ frontend mirrors it defensively.
 
 | Method | Path | Device call |
 |---|---|---|
-| ✅ | `GET /timezones` | `load_objects.fcgi` `object:"time_zones"` — implemented 2026-09-14 for the Access (Global) report's Time Zone filter (`docs/backend-api.md`). Name-only, no `time_spans` detail yet. |
-| 📋 | `GET /time-zones/:id/spans` | `load_objects.fcgi` `object:"time_spans"`, filtered — not yet needed by any UI, not implemented |
-| 📋 | `POST /time-zones` | write side not yet confirmed |
-| 📋 | `POST /time-zones/:id/spans` | write side not yet confirmed |
-| 📋 | `DELETE /time-zones/:id` | write side not yet confirmed |
+| ✅ | `GET /timezones` | `load_objects.fcgi` `object:"time_zones"` — implemented 2026-09-14 for the Access (Global) report's Time Zone filter (`docs/backend-api.md`). |
+| ✅ | `GET /timezones/:id/spans` | `load_objects.fcgi` `object:"time_spans"`, filtered by `time_zone_id` — implemented 2026-09-15. |
+| ✅ | `POST /timezones` | `create_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15 via XHR-interceptor capture: same extended shape as Groups'/Visits' own create. See `.plans/2026-09-15-timezones-write-side/`. |
+| ✅ | `PATCH /timezones/:id` | `modify_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15, Group 8 |
+| ✅ | `DELETE /timezones/:id` | `destroy_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15, Group 8 |
+| ✅ | `POST /timezones/:id/spans` | `create_objects.fcgi` against `time_spans` — `LIVE_CONFIRMED` 2026-09-15, Group 8. **Real bug caught and fixed here**: the device requires `sun`/`mon`/…/`hol3` as plain 0/1 integers, not JSON booleans (`{"error":"Invalid member 'sun' (int expected, got boolean)","code":1}` on the first real attempt) — matches the field's already-known 0/1-integer read-side shape, but this write-side requirement wasn't confirmed until this live test. |
+| ✅ | `PATCH /timespans/:id` | `modify_objects.fcgi` against `time_spans` — `LIVE_CONFIRMED` 2026-09-15, Group 8 (same int-not-boolean fix applies) |
+| ✅ | `DELETE /timespans/:id` | `destroy_objects.fcgi` against `time_spans` — `LIVE_CONFIRMED` 2026-09-15, Group 8 |
 
-Same caveat as Groups: name-only read shape confirmed and now
-implemented; `time_spans` detail and the write shape both still need a
-short `timespan.js` discovery pass before implementation.
+**Protected time zone id 1** ("Always Allowed" on this device): same
+`noSave:[1]` pattern already found for Groups — confirmed live (its
+Name field renders `disabled="disabled"`; its time-span sub-table
+shows no Add/Remove controls at all). Not replicated server-side (see
+spec.md Decision 3) — only the frontend mirrors it defensively.
 
 ## 6b. Visits (Enroll → Visits) — ✅ Implemented (2026-09-14)
 
@@ -319,28 +324,30 @@ pass) confirms the real object names/fields/commands.
 ## Suggested next discovery pass
 
 Within **Enroll** specifically (the sidebar area this project has
-focused on so far — Users ✅, Visitors ✅, Groups ✅ (read+write,
-2026-09-15), Visits ✅ implemented 2026-09-14 — see sections 5/6b), the
-remaining items in the real device's own Enroll submenu, in sidebar
-order:
+focused on so far — Users ✅, Visitors ✅, Groups ✅, Time Zones ✅
+(read+write, 2026-09-15), Visits ✅ implemented 2026-09-14 — see
+sections 5/6/6b), the remaining items in the real device's own Enroll
+submenu, in sidebar order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | Time Zones (write side + `time_spans` detail) | 📋 evidence-backed but unconfirmed write shape — see section 6 |
-| 2 | Holidays (`holiday.html`) | 🔍 discovery pending — likely small, similar shape to `time_spans` |
-| 3 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
-| 4 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
-| 5 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
+| 1 | Holidays (`holiday.html`) | 🔍 discovery pending, though its schema was already incidentally found while reading `class.js` for Time Zones: `id`/`name`/`start`/`hol1..hol3`/`repeats`/`end` (computed, always `start+86399`) — see `.plans/2026-09-15-timezones-write-side/DECISION_LOG.md` |
+| 2 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
+| 3 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
+| 4 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
 
-**Recommended next single step:** Groups' write side (create/rename/
-delete) is now implemented (SDK/backend/frontend/tests — section 5);
-only the gated Group 8 live test remains to independently confirm the
-`modify_objects.fcgi`/`destroy_objects.fcgi` shapes (currently inferred
-by symmetry with the already-proven shared mechanism) — see
-`.plans/2026-09-15-groups-write-side/tasks.md`. Otherwise, Time Zones'
-write side per row 1 above is the next ready-to-plan item — already an
-evidence-backed read, just needs a short discovery pass on its write
-shape (and the `time_spans` detail object) first.
+**Recommended next single step:** Time Zones' write side (zone create/
+rename/delete plus full `time_spans` CRUD) is now implemented
+(SDK/backend/frontend/tests — section 6); only the gated Group 8 live
+test remains to independently confirm the `modify_objects.fcgi`/
+`destroy_objects.fcgi` shapes (currently inferred by symmetry with the
+already-proven shared mechanism) — see
+`.plans/2026-09-15-timezones-write-side/tasks.md`. Otherwise, Holidays
+per row 1 above is the next ready-to-plan item — its schema is already
+known from this session's own `class.js` read, just needs its own
+short live-capture pass on the create/update payload shape (matching
+this project's now-established "capture the create shape live before
+assuming symmetry" discipline) before planning.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings
