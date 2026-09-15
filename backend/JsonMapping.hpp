@@ -24,6 +24,7 @@ nlohmann::json toJson(const amico::AccessLogEntry& entry,
 nlohmann::json toJson(const amico::SystemInformation& info);
 nlohmann::json toJson(const amico::Visit& visit);
 nlohmann::json toJson(const amico::Holiday& holiday);
+nlohmann::json toJson(const amico::ScheduledUnlock& unlock);
 
 /// Throws nlohmann::json::exception (missing/wrong-typed required
 /// field) or std::invalid_argument/std::out_of_range (numeric parsing)
@@ -51,5 +52,12 @@ amico::TimeSpanUpdate fromJsonTimeSpanUpdate(int64_t id, const nlohmann::json& b
 /// caller-supplied "end" key is silently ignored.
 amico::NewHoliday fromJsonNewHoliday(const nlohmann::json& body);
 amico::HolidayUpdate fromJsonHolidayUpdate(int64_t id, const nlohmann::json& body);
+/// Never parses a "timeZoneIds" key -- amico::NewScheduledUnlock/
+/// ScheduledUnlockUpdate have no such member (linking is only ever
+/// done via POST/DELETE /scheduled-unlocks/:id/timezones/:timeZoneId,
+/// .plans/2026-09-15-scheduled-unlock-write-side/spec.md Decision 1);
+/// a caller-supplied "timeZoneIds" key is silently ignored.
+amico::NewScheduledUnlock fromJsonNewScheduledUnlock(const nlohmann::json& body);
+amico::ScheduledUnlockUpdate fromJsonScheduledUnlockUpdate(int64_t id, const nlohmann::json& body);
 
 }  // namespace amico::backend

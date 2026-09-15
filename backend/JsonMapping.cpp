@@ -95,6 +95,13 @@ nlohmann::json toJson(const amico::Holiday& holiday) {
     };
 }
 
+nlohmann::json toJson(const amico::ScheduledUnlock& unlock) {
+    return {
+        {"id", unlock.id}, {"name", unlock.name}, {"message", unlock.message},
+        {"timeZoneIds", unlock.timeZoneIds},
+    };
+}
+
 nlohmann::json toJson(const amico::Visit& visit) {
     nlohmann::json j;
     j["id"] = visit.id;
@@ -254,6 +261,30 @@ amico::HolidayUpdate fromJsonHolidayUpdate(int64_t id, const nlohmann::json& bod
     amico::HolidayUpdate update;
     update.id = id;
     readHolidayFields(update, body);
+    return update;
+}
+
+namespace {
+// "timeZoneIds" is deliberately never read here -- linking is only
+// ever done via the dedicated addTimeZone/removeTimeZone routes
+// (spec.md Decision 1).
+template <typename T>
+void readScheduledUnlockFields(T& unlock, const nlohmann::json& body) {
+    unlock.name = body.at("name").get<std::string>();
+    unlock.message = body.at("message").get<std::string>();
+}
+}  // namespace
+
+amico::NewScheduledUnlock fromJsonNewScheduledUnlock(const nlohmann::json& body) {
+    amico::NewScheduledUnlock unlock;
+    readScheduledUnlockFields(unlock, body);
+    return unlock;
+}
+
+amico::ScheduledUnlockUpdate fromJsonScheduledUnlockUpdate(int64_t id, const nlohmann::json& body) {
+    amico::ScheduledUnlockUpdate update;
+    update.id = id;
+    readScheduledUnlockFields(update, body);
     return update;
 }
 

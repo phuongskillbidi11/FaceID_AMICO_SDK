@@ -365,6 +365,35 @@ struct HolidayUpdate {
     bool repeats = true;
 };
 
+/// Public view of the `scheduled_unlocks` object. `timeZoneIds` is
+/// resolved through a 2-hop join (`access_rules`/`access_rule_time_zones`)
+/// -- not a real device column -- LIVE_CONFIRMED via
+/// .plans/2026-09-15-scheduled-unlock-write-side/spec.md Background.
+struct ScheduledUnlock {
+    int64_t id = 0;
+    std::string name;
+    std::string message;
+    std::vector<int64_t> timeZoneIds;
+};
+
+/// Creation parameters for the `scheduled_unlocks` object.
+/// Deliberately has no `timeZoneIds` member -- create() never
+/// auto-links any time zone (spec.md Decision 1); use
+/// ScheduledUnlocksApi::addTimeZone() afterward.
+struct NewScheduledUnlock {
+    std::string name;
+    std::string message;
+};
+
+/// Update parameters for the `scheduled_unlocks` object. Same
+/// no-timeZoneIds rationale as NewScheduledUnlock -- linking is only
+/// ever done via addTimeZone()/removeTimeZone().
+struct ScheduledUnlockUpdate {
+    int64_t id = 0;
+    std::string name;
+    std::string message;
+};
+
 /// Public view of the `visits` object (Visits plan, 2026-09-14).
 /// `visitorName`/`hostName`/`cardCount` are enrichment fields this SDK
 /// resolves via the already-existing UsersApi::getNamesByIds() and

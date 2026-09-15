@@ -349,7 +349,7 @@ inventing a feature the real device doesn't expose as a page.
 
 ---
 
-## 10b. Scheduled Unlock (Enroll → Scheduled Unlock) — 🔍 discovery complete, ready to plan (2026-09-15)
+## 10b. Scheduled Unlock (Enroll → Scheduled Unlock) — ✅ Implemented (read + write, 2026-09-15)
 
 **More complex than Groups/Time Zones/Holidays — not a simple lookup
 object.** `LIVE_CONFIRMED` via `class.js`'s `CID.createClass` static
@@ -451,16 +451,29 @@ confirmed by both lists reverting to their pre-test state (1 time
 zone: "Always Allowed"; 0 scheduled unlocks). No lasting change to the
 device.
 
-**Ready to plan** — the base object, create shape, and the full
-add/remove-time-zone-link mechanism (including the auto-created
-`access_rules`/`scheduled_unlock_access_rules` rows) are now all
-`LIVE_CONFIRMED`. The only remaining unknowns (delete-cascade behavior
-for `access_rules`/`scheduled_unlock_access_rules`, and whether
-`portal_access_rules` needs its own write on a multi-portal device) are
-narrow enough to defer to the eventual plan's own Group 8/manual live
-verification, matching this project's established practice of not
-over-speccing unconfirmed cascade behavior up front (same precedent as
-`DELETE /timezones/:id` not asserting `time_spans` cascade).
+**Implemented** (`.plans/2026-09-15-scheduled-unlock-write-side/`):
+full CRUD for the base `name`/`message` fields plus explicit
+`addTimeZone`/`removeTimeZone` linking, hiding the `access_rules`/
+`scheduled_unlock_access_rules` plumbing behind those two methods
+(spec.md Decision 2). `create()` deliberately does **not** auto-link
+time zone id 1 the way the real UI's own form default does (spec.md
+Decision 1 — a documented, deliberate divergence). The remaining
+unknowns (delete-cascade behavior for `access_rules`/
+`scheduled_unlock_access_rules`, and whether `portal_access_rules`
+needs its own write on a multi-portal device) are deferred to this
+plan's own Group 7 manual live verification, matching this project's
+established practice of not over-speccing unconfirmed cascade behavior
+up front (same precedent as `DELETE /timezones/:id` not asserting
+`time_spans` cascade).
+
+| Method | Path | Device call |
+|---|---|---|
+| ✅ | `GET /scheduled-unlocks` | `load_objects.fcgi` `object:"scheduled_unlocks"`, plus one `time_zones` cross-object-where read per row to populate `timeZoneIds` |
+| ✅ | `POST /scheduled-unlocks` | `create_objects.fcgi` — `LIVE_CONFIRMED`; never auto-links a time zone (spec.md Decision 1) |
+| ✅ | `PATCH /scheduled-unlocks/:id` | `modify_objects.fcgi` — built by symmetry with the shared `messenger.js` mechanism; **not yet independently live-confirmed for `scheduled_unlocks` specifically** — pending this plan's own Group 7 |
+| ✅ | `DELETE /scheduled-unlocks/:id` | `destroy_objects.fcgi` — same not-yet-confirmed caveat; does not cascade-clean `access_rules`/etc. (spec.md Decision 3) |
+| ✅ | `POST /scheduled-unlocks/:id/timezones/:timeZoneId` | `create_objects.fcgi` against `access_rules`/`scheduled_unlock_access_rules`/`access_rule_time_zones` as needed — `LIVE_CONFIRMED` sequence; the "does an access_rule already exist" lookup itself is inferred, not captured (spec.md Decision 2, Risks) |
+| ✅ | `DELETE /scheduled-unlocks/:id/timezones/:timeZoneId` | `destroy_objects.fcgi` against `access_rule_time_zones` — `LIVE_CONFIRMED` shape; same lookup caveat |
 
 ---
 
@@ -488,28 +501,26 @@ pass) confirms the real object names/fields/commands.
 ## Suggested next discovery pass
 
 Within **Enroll** specifically (the sidebar area this project has
-focused on so far — Users ✅, Visitors ✅, Groups ✅, Time Zones ✅
-(read+write, 2026-09-15), Visits ✅ implemented 2026-09-14, Holidays ✅
-implemented 2026-09-15 — see sections 5/6/6b/6c), the remaining items
-in the real device's own Enroll submenu, in sidebar order:
+focused on so far — Users ✅, Visitors ✅, Groups ✅ (⚠️ known Time
+Zones tab gap, section 5), Time Zones ✅ (read+write, 2026-09-15),
+Visits ✅ implemented 2026-09-14, Holidays ✅ implemented 2026-09-15,
+Scheduled Unlock ✅ implemented 2026-09-15 — see sections 5/6/6b/6c/10b),
+the remaining items in the real device's own Enroll submenu, in
+sidebar order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | Scheduled Unlock (`scheduledunlock.html`) | ✅ discovery complete (section 10b) — base object, create shape, and the full add/remove-time-zone-link mechanism are all `LIVE_CONFIRMED`; ready for a spec/plan |
+| 1 | Groups' own Time Zones tab | ⚠️ known gap (section 5) — reuses the same `access_rules`/`access_rule_time_zones` mechanism just confirmed/implemented for Scheduled Unlock; fast follow-up |
 | 2 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
 | 3 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
 
-**Recommended next single step:** Write the spec/plan for Scheduled
-Unlock (section 10b) — full CRUD for the base `name`/`message` fields
-plus add/remove time-zone linking, mirroring the already-confirmed
-`create_objects.fcgi`/`destroy_objects.fcgi` shapes. Decide during
-planning whether to auto-create the `access_rules`/
-`scheduled_unlock_access_rules` rows transparently (matching the real
-device's own UI behavior) or expose them as a more explicit concept —
-this project's existing precedent (e.g. Holidays' `end` field) favors
-hiding derived/plumbing writes from the caller wherever the real UI
-also hides them. Otherwise, User Types per row 2 above is the next
-item needing a discovery pass.
+**Recommended next single step:** Close the Groups Time Zones gap
+(row 1) — the exact `access_rules`/`access_rule_time_zones` link/
+unlink mechanism is already fully confirmed and implemented for
+Scheduled Unlock (section 10b); a Groups follow-up plan can reuse the
+same query builders/pattern, only swapping `scheduled_unlock_access_rules`
+for `group_access_rules` as the other half of the join. Otherwise,
+User Types per row 2 above is the next item needing a discovery pass.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings

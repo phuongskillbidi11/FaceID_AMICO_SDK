@@ -378,3 +378,33 @@ TEST_CASE("Q-16: kHolidayFields never includes password/salt/panic_password/pani
         CHECK(field != "panic_salt");
     }
 }
+
+TEST_CASE("Q-17 (Scheduled Unlock write-side plan, 2026-09-15): no new scheduled_unlocks/access_rules builder accepts a caller-supplied object/field/connector string") {
+    // buildScheduledUnlocksListBody/CreateBody/UpdateBody/DeleteBody,
+    // buildScheduledUnlockTimeZoneIdsBody/AccessRuleIdBody/
+    // AccessRuleCreateBody/AccessRuleLinkBody, and
+    // buildAccessRuleTimeZoneLinkBody/UnlinkBody (ObjectQuery.hpp) take
+    // only int64_t/std::string VALUE parameters -- never a
+    // field/object/connector name. Compile-time fact verified by their
+    // signatures; no runtime assertion is meaningful here (same pattern
+    // as Q-9/Q-12/Q-13/Q-15 above).
+    CHECK(detail::buildScheduledUnlocksListBody()["object"] == "scheduled_unlocks");
+    CHECK(detail::buildScheduledUnlockCreateBody("Test", "msg")["object"] == "scheduled_unlocks");
+    CHECK(detail::buildScheduledUnlockUpdateBody(1, "Test", "msg")["object"] == "scheduled_unlocks");
+    CHECK(detail::buildScheduledUnlockDeleteBody(1)["object"] == "scheduled_unlocks");
+    CHECK(detail::buildScheduledUnlockTimeZoneIdsBody(1)["object"] == "time_zones");
+    CHECK(detail::buildScheduledUnlockAccessRuleIdBody(1)["object"] == "scheduled_unlock_access_rules");
+    CHECK(detail::buildScheduledUnlockAccessRuleCreateBody(1)["object"] == "access_rules");
+    CHECK(detail::buildScheduledUnlockAccessRuleLinkBody(1, 4)["object"] == "scheduled_unlock_access_rules");
+    CHECK(detail::buildAccessRuleTimeZoneLinkBody(4, 1)["object"] == "access_rule_time_zones");
+    CHECK(detail::buildAccessRuleTimeZoneUnlinkBody(4, 1)["object"] == "access_rule_time_zones");
+}
+
+TEST_CASE("Q-18: kScheduledUnlockFields never includes password/salt/panic_password/panic_salt") {
+    for (const auto& field : detail::kScheduledUnlockFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
+}

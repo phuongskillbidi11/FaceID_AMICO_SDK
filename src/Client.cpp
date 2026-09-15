@@ -923,6 +923,133 @@ struct AmicoClient::Impl {
         }
     }
 
+    std::vector<int64_t> listScheduledUnlockTimeZoneIds(int64_t scheduledUnlockId) {
+        nlohmann::json body = detail::buildScheduledUnlockTimeZoneIdsBody(scheduledUnlockId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto timeZonesIt = response.find("time_zones");
+        if (timeZonesIt == response.end() || !timeZonesIt->is_array()) {
+            throw ProtocolError("missing required field 'time_zones' in response from /load_objects.fcgi");
+        }
+        std::vector<int64_t> result;
+        result.reserve(timeZonesIt->size());
+        for (const auto& row : *timeZonesIt) {
+            result.push_back(requireField<int64_t>(row, "id", "/load_objects.fcgi (time_zones by scheduled_unlock)"));
+        }
+        return result;
+    }
+
+    ScheduledUnlock mapScheduledUnlock(const nlohmann::json& row) {
+        ScheduledUnlock unlock;
+        unlock.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (scheduled_unlocks)");
+        unlock.name = requireField<std::string>(row, "name", "/load_objects.fcgi (scheduled_unlocks)");
+        unlock.message = requireField<std::string>(row, "message", "/load_objects.fcgi (scheduled_unlocks)");
+        unlock.timeZoneIds = listScheduledUnlockTimeZoneIds(unlock.id);
+        return unlock;
+    }
+
+    std::vector<ScheduledUnlock> listScheduledUnlocks() {
+        nlohmann::json body = detail::buildScheduledUnlocksListBody();
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("scheduled_unlocks");
+        if (it == response.end() || !it->is_array()) {
+            throw ProtocolError("missing required field 'scheduled_unlocks' in response from /load_objects.fcgi");
+        }
+        std::vector<ScheduledUnlock> result;
+        result.reserve(it->size());
+        for (const auto& row : *it) {
+            result.push_back(mapScheduledUnlock(row));
+        }
+        return result;
+    }
+
+    int64_t createScheduledUnlock(const NewScheduledUnlock& unlock) {
+        nlohmann::json body = detail::buildScheduledUnlockCreateBody(unlock.name, unlock.message);
+        nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
+
+        nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
+        if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        return ids.front().get<int64_t>();
+    }
+
+    void updateScheduledUnlock(const ScheduledUnlockUpdate& unlock) {
+        nlohmann::json body = detail::buildScheduledUnlockUpdateBody(unlock.id, unlock.name, unlock.message);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeScheduledUnlock(int64_t id) {
+        nlohmann::json body = detail::buildScheduledUnlockDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
+    /// NOT independently live-captured (spec.md Decision 2, Risks) --
+    /// looks up the access_rule_id linked to a scheduled unlock, if
+    /// any, via scheduled_unlock_access_rules.
+    std::optional<int64_t> findScheduledUnlockAccessRuleId(int64_t scheduledUnlockId) {
+        nlohmann::json body = detail::buildScheduledUnlockAccessRuleIdBody(scheduledUnlockId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("scheduled_unlock_access_rules");
+        if (it == response.end() || !it->is_array()) {
+            throw ProtocolError("missing required field 'scheduled_unlock_access_rules' in response from /load_objects.fcgi");
+        }
+        if (it->empty()) {
+            return std::nullopt;
+        }
+        return requireField<int64_t>(it->front(), "access_rule_id", "/load_objects.fcgi (scheduled_unlock_access_rules)");
+    }
+
+    void addScheduledUnlockTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
+        std::optional<int64_t> accessRuleId = findScheduledUnlockAccessRuleId(scheduledUnlockId);
+        if (!accessRuleId.has_value()) {
+            nlohmann::json createBody = detail::buildScheduledUnlockAccessRuleCreateBody(scheduledUnlockId);
+            nlohmann::json createResponse = postAuthenticatedJson("/create_objects.fcgi", createBody);
+            nlohmann::json ids = requireField<nlohmann::json>(createResponse, "ids", "/create_objects.fcgi");
+            if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+                throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+            }
+            accessRuleId = ids.front().get<int64_t>();
+
+            nlohmann::json linkBody = detail::buildScheduledUnlockAccessRuleLinkBody(scheduledUnlockId, *accessRuleId);
+            nlohmann::json linkResponse = postAuthenticatedJson("/create_objects.fcgi", linkBody);
+            nlohmann::json linkIds = requireField<nlohmann::json>(linkResponse, "ids", "/create_objects.fcgi");
+            if (!linkIds.is_array() || linkIds.empty()) {
+                throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+            }
+        }
+
+        nlohmann::json tzBody = detail::buildAccessRuleTimeZoneLinkBody(*accessRuleId, timeZoneId);
+        nlohmann::json tzResponse = postAuthenticatedJson("/create_objects.fcgi", tzBody);
+        nlohmann::json tzIds = requireField<nlohmann::json>(tzResponse, "ids", "/create_objects.fcgi");
+        if (!tzIds.is_array() || tzIds.empty()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+    }
+
+    void removeScheduledUnlockTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
+        std::optional<int64_t> accessRuleId = findScheduledUnlockAccessRuleId(scheduledUnlockId);
+        if (!accessRuleId.has_value()) {
+            throw ProtocolError("scheduled unlock has no linked time zones to remove");
+        }
+        nlohmann::json body = detail::buildAccessRuleTimeZoneUnlinkBody(*accessRuleId, timeZoneId);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
     /// Resolves the 2-hop time-zone join for a batch of access_log ids
     /// (spec.md Decision 2b). Tie-break: the first row encountered at
     /// each hop wins -- deterministic, not arbitrary; matches every row
@@ -1226,6 +1353,16 @@ std::vector<Holiday> AmicoClient::listHolidaysImpl() { return impl_->listHoliday
 int64_t AmicoClient::createHolidayImpl(const NewHoliday& holiday) { return impl_->createHoliday(holiday); }
 void AmicoClient::updateHolidayImpl(const HolidayUpdate& holiday) { impl_->updateHoliday(holiday); }
 void AmicoClient::removeHolidayImpl(int64_t id) { impl_->removeHoliday(id); }
+std::vector<ScheduledUnlock> AmicoClient::listScheduledUnlocksImpl() { return impl_->listScheduledUnlocks(); }
+int64_t AmicoClient::createScheduledUnlockImpl(const NewScheduledUnlock& unlock) { return impl_->createScheduledUnlock(unlock); }
+void AmicoClient::updateScheduledUnlockImpl(const ScheduledUnlockUpdate& unlock) { impl_->updateScheduledUnlock(unlock); }
+void AmicoClient::removeScheduledUnlockImpl(int64_t id) { impl_->removeScheduledUnlock(id); }
+void AmicoClient::addScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId) {
+    impl_->addScheduledUnlockTimeZone(scheduledUnlockId, timeZoneId);
+}
+void AmicoClient::removeScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId) {
+    impl_->removeScheduledUnlockTimeZone(scheduledUnlockId, timeZoneId);
+}
 
 std::vector<AmicoUser> AmicoClient::UsersApi::list(const UserQuery& query) { return owner_->listUsersImpl(query); }
 std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::UsersApi::getNamesByIds(const std::vector<int64_t>& ids) {
@@ -1276,6 +1413,16 @@ std::vector<Holiday> AmicoClient::HolidaysApi::list() { return owner_->listHolid
 int64_t AmicoClient::HolidaysApi::create(const NewHoliday& holiday) { return owner_->createHolidayImpl(holiday); }
 void AmicoClient::HolidaysApi::update(const HolidayUpdate& holiday) { owner_->updateHolidayImpl(holiday); }
 void AmicoClient::HolidaysApi::remove(int64_t id) { owner_->removeHolidayImpl(id); }
+std::vector<ScheduledUnlock> AmicoClient::ScheduledUnlocksApi::list() { return owner_->listScheduledUnlocksImpl(); }
+int64_t AmicoClient::ScheduledUnlocksApi::create(const NewScheduledUnlock& unlock) { return owner_->createScheduledUnlockImpl(unlock); }
+void AmicoClient::ScheduledUnlocksApi::update(const ScheduledUnlockUpdate& unlock) { owner_->updateScheduledUnlockImpl(unlock); }
+void AmicoClient::ScheduledUnlocksApi::remove(int64_t id) { owner_->removeScheduledUnlockImpl(id); }
+void AmicoClient::ScheduledUnlocksApi::addTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
+    owner_->addScheduledUnlockTimeZoneImpl(scheduledUnlockId, timeZoneId);
+}
+void AmicoClient::ScheduledUnlocksApi::removeTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
+    owner_->removeScheduledUnlockTimeZoneImpl(scheduledUnlockId, timeZoneId);
+}
 
 void setTransportForTesting(AmicoClient& client, std::unique_ptr<IHttpTransport> transport) {
     client.impl_->transport = std::move(transport);

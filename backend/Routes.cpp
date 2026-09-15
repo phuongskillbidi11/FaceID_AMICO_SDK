@@ -1204,6 +1204,121 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Scheduled Unlock (2026-09-15-scheduled-unlock-write-side) -- no
+    // X-Confirm-Sensitive-Action header required, same precedent as
+    // Groups/Time Zones/Holidays/Visits.
+    svr.Get("/scheduled-unlocks", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& unlock : client.scheduledUnlocks().list()) rows.push_back(toJson(unlock));
+            res.set_content(nlohmann::json{{"scheduledUnlocks", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post("/scheduled-unlocks", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewScheduledUnlock newUnlock;
+        try {
+            newUnlock = fromJsonNewScheduledUnlock(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.scheduledUnlocks().create(newUnlock);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Patch(R"(/scheduled-unlocks/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::ScheduledUnlockUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonScheduledUnlockUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.scheduledUnlocks().update(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/scheduled-unlocks/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.scheduledUnlocks().remove(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post(R"(/scheduled-unlocks/(\d+)/timezones/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t scheduledUnlockId = 0, timeZoneId = 0;
+        try {
+            scheduledUnlockId = std::stoll(req.matches[1]);
+            timeZoneId = std::stoll(req.matches[2]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.scheduledUnlocks().addTimeZone(scheduledUnlockId, timeZoneId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/scheduled-unlocks/(\d+)/timezones/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t scheduledUnlockId = 0, timeZoneId = 0;
+        try {
+            scheduledUnlockId = std::stoll(req.matches[1]);
+            timeZoneId = std::stoll(req.matches[2]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.scheduledUnlocks().removeTimeZone(scheduledUnlockId, timeZoneId);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/access-logs", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

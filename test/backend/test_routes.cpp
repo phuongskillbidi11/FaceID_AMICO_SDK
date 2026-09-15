@@ -923,10 +923,124 @@ TEST_CASE("V-4: DELETE /holidays/:id success returns 200") {
     CHECK(res->status == 200);
 }
 
+TEST_CASE("W-1: GET /scheduled-unlocks returns the list with timeZoneIds populated") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "scheduled_unlocks") {
+            return FakeTransport::ok(nlohmann::json{{"scheduled_unlocks", nlohmann::json::array({
+                {{"id", 1}, {"name", "Weekend"}, {"message", "msg"}},
+            })}}.dump());
+        }
+        if (req.path == "/load_objects.fcgi" && object == "time_zones") {
+            return FakeTransport::ok(nlohmann::json{{"time_zones", nlohmann::json::array({{{"id", 1}}})}}.dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/scheduled-unlocks");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json parsed = nlohmann::json::parse(res->body);
+    REQUIRE(parsed["scheduledUnlocks"].size() == 1);
+    CHECK(parsed["scheduledUnlocks"][0]["timeZoneIds"] == nlohmann::json::array({1}));
+}
+
+TEST_CASE("W-2: POST /scheduled-unlocks creates a scheduled unlock and ignores a caller-supplied timeZoneIds") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "scheduled_unlocks") {
+            CHECK(body["values"][0]["name"] == "ZZ_Test");
+            CHECK(body["values"][0]["message"] == "msg");
+            return FakeTransport::ok(R"({"ids":[7]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/scheduled-unlocks",
+        R"({"name":"ZZ_Test","message":"msg","timeZoneIds":[1,2]})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 7);
+}
+
+TEST_CASE("W-3: PATCH /scheduled-unlocks/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/modify_objects.fcgi" && body["object"] == "scheduled_unlocks") {
+            CHECK(body["values"]["name"] == "Renamed");
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/scheduled-unlocks/1", R"({"name":"Renamed","message":"msg"})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("W-4: DELETE /scheduled-unlocks/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/scheduled-unlocks/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("W-5: POST /scheduled-unlocks/:id/timezones/:timeZoneId takes both ids from the path") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "scheduled_unlock_access_rules") {
+            return FakeTransport::ok(nlohmann::json{{"scheduled_unlock_access_rules", nlohmann::json::array({
+                {{"access_rule_id", 4}},
+            })}}.dump());
+        }
+        if (req.path == "/create_objects.fcgi" && object == "access_rule_time_zones") {
+            CHECK(body["values"][0]["access_rule_id"] == 4);
+            CHECK(body["values"][0]["time_zone_id"] == 3);
+            return FakeTransport::ok(R"({"ids":[10]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/scheduled-unlocks/2/timezones/3", "", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("W-6: DELETE /scheduled-unlocks/:id/timezones/:timeZoneId takes both ids from the path") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "scheduled_unlock_access_rules") {
+            return FakeTransport::ok(nlohmann::json{{"scheduled_unlock_access_rules", nlohmann::json::array({
+                {{"access_rule_id", 4}},
+            })}}.dump());
+        }
+        if (req.path == "/destroy_objects.fcgi" && object == "access_rule_time_zones") {
+            CHECK(body["where"][0]["value"] == 4);
+            CHECK(body["where"][1]["value"] == nlohmann::json::array({3}));
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Delete("/scheduled-unlocks/2/timezones/3");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);
-    for (const auto* path : {"/groups", "/timezones", "/holidays", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
+    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
         auto res = cli.Get(path);
         REQUIRE(res != nullptr); CHECK(res->status == 401);
     }

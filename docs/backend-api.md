@@ -592,6 +592,52 @@ always sends the full current+edited set). `200 {"success": true}`.
 `noSave` id in the device's own `class.js` — every holiday supports
 full edit/remove, in both the real device's UI and this backend.
 
+### `GET /scheduled-unlocks`
+Session required. `200` response:
+```json
+{"scheduledUnlocks": [{"id": 1, "name": "Weekend", "message": "",
+  "timeZoneIds": [1]}]}
+```
+An empty list returns `{"scheduledUnlocks": []}`. `timeZoneIds` is
+resolved through the device's own `access_rules`/
+`access_rule_time_zones` join, not a plain column — see
+`docs/api-roadmap.md` section 10b.
+
+### `POST /scheduled-unlocks`
+Body: `{"name": "<name>", "message": "<message>"}`. `201 {"id": <new
+scheduled unlock id>}`.
+
+**No `timeZoneIds` in the request body:** a caller-supplied
+`timeZoneIds` key is silently ignored — a brand-new scheduled unlock
+is always created with zero linked time zones. Use the dedicated link
+routes below to add any. This is a deliberate divergence from the real
+device's own Add form, which starts with a default time zone already
+selected — a pure client-side form convenience, not a device
+requirement (see `docs/api-roadmap.md` section 10b, "Decision 1").
+
+### `PATCH /scheduled-unlocks/:id`
+Body: `{"name": "<name>", "message": "<message>"}` — no meaningful
+partial update, same reasoning as `/groups`. `200 {"success": true}`.
+
+### `DELETE /scheduled-unlocks/:id`
+`200 {"success": true}`. Does not attempt to clean up the backing
+`access_rules`/`scheduled_unlock_access_rules`/`access_rule_time_zones`
+rows — whether the device cascades this on its own is unconfirmed, not
+assumed (same precedent as `DELETE /timezones/:id` not asserting
+`time_spans` cascade).
+
+### `POST /scheduled-unlocks/:id/timezones/:timeZoneId`
+Both ids come from the URL; no body. `200 {"success": true}`. Links
+the given time zone to the scheduled unlock, auto-creating the backing
+`access_rules`/`scheduled_unlock_access_rules` rows on the first link
+for a given scheduled unlock.
+
+### `DELETE /scheduled-unlocks/:id/timezones/:timeZoneId`
+Both ids come from the URL. `200 {"success": true}`. Unlinks the given
+time zone. Only the specific link row is removed — the backing
+`access_rules`/`scheduled_unlock_access_rules` rows are left intact
+even if this was the last linked time zone.
+
 ### `GET /access-logs?from=&to=&limit=&offset=&userIds=&groupIds=&timeZoneIds=`
 Session required. Optional `userIds`, `groupIds`, and `timeZoneIds` accept
 signed 64-bit integer IDs, comma-separated and/or repeated. For example:

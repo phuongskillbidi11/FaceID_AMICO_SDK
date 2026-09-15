@@ -102,7 +102,11 @@ function initUserListPage({
   let listVersion = 0;
   // Shared across every modal opened from this tab in this page session --
   // the device's own groups list rarely changes mid-session, and this
-  // avoids a redundant GET /groups per Edit click.
+  // avoids a redundant GET /groups per Edit click. Invalidated by
+  // groups.js's own "groups-changed" event (dispatched after a
+  // successful create/rename/remove on the Groups tab) so a group
+  // deleted while this cache was warm doesn't linger as a stale,
+  // always-400 "Available" option in this modal's own picker.
   let allGroupsPromise;
   function loadAllGroups() {
     if (!allGroupsPromise) {
@@ -111,6 +115,7 @@ function initUserListPage({
     }
     return allGroupsPromise;
   }
+  document.addEventListener("groups-changed", () => { allGroupsPromise = undefined; });
 
   function renderPhoto(container, item, imageClass = "thumbnail") {
     const placeholder = () => container.replaceChildren(element("span", "No image", "placeholder"));

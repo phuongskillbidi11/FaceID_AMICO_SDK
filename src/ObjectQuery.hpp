@@ -139,6 +139,61 @@ nlohmann::json buildHolidayUpdateBody(int64_t id, const std::string& name, int64
 /// not-yet-independently-confirmed caveat as buildHolidayUpdateBody.
 nlohmann::json buildHolidayDeleteBody(int64_t id);
 
+/// Full scheduled-unlocks list, unfiltered/unpaginated (same rationale
+/// as buildHolidaysListBody).
+nlohmann::json buildScheduledUnlocksListBody();
+
+/// Single-scheduled-unlock creation body for `create_objects.fcgi`.
+/// LIVE_CONFIRMED wire shape 2026-09-15 via XHR-interceptor capture
+/// (.plans/2026-09-15-scheduled-unlock-write-side/spec.md Background):
+/// same extended shape as every other object this session.
+nlohmann::json buildScheduledUnlockCreateBody(const std::string& name, const std::string& message);
+
+/// Single-scheduled-unlock rename/message-update body for
+/// `modify_objects.fcgi`. NOT independently live-captured -- built by
+/// symmetry with the shared `messenger.js` mechanism (same pattern as
+/// buildHolidayUpdateBody). Confirm during this plan's own Group 7.
+nlohmann::json buildScheduledUnlockUpdateBody(int64_t id, const std::string& name, const std::string& message);
+
+/// Single-scheduled-unlock deletion body for `destroy_objects.fcgi`.
+/// Same not-yet-independently-confirmed caveat. Does NOT touch
+/// access_rules/scheduled_unlock_access_rules/access_rule_time_zones
+/// (spec.md Decision 3 -- no cascade cleanup assumed without evidence).
+nlohmann::json buildScheduledUnlockDeleteBody(int64_t id);
+
+/// Resolves the linked time-zone ids for one scheduled unlock.
+/// LIVE_CONFIRMED shape (spec.md Background) -- the device resolves
+/// the access_rules/access_rule_time_zones join server-side given a
+/// cross-object `where` referencing scheduled_unlocks.id (the first
+/// object in this codebase whose `where.object` differs from its own
+/// top-level `object`).
+nlohmann::json buildScheduledUnlockTimeZoneIdsBody(int64_t scheduledUnlockId);
+
+/// Finds the access_rule_id linked to a scheduled unlock, if any (via
+/// `scheduled_unlock_access_rules`). NOT independently live-captured
+/// -- inferred by symmetry with this session's established
+/// bare-object `where` shape (spec.md Decision 2). Confirm/adjust
+/// during this plan's own Group 7.
+nlohmann::json buildScheduledUnlockAccessRuleIdBody(int64_t scheduledUnlockId);
+
+/// Creates the access_rules row backing a scheduled unlock's first
+/// ever time-zone link. LIVE_CONFIRMED verbatim shape (spec.md
+/// Background) -- auto-generated name matches the device's own
+/// convention exactly (`type:1, priority:0`).
+nlohmann::json buildScheduledUnlockAccessRuleCreateBody(int64_t scheduledUnlockId);
+
+/// Links an existing access_rule to a scheduled unlock via
+/// `scheduled_unlock_access_rules`. LIVE_CONFIRMED verbatim shape.
+nlohmann::json buildScheduledUnlockAccessRuleLinkBody(int64_t scheduledUnlockId, int64_t accessRuleId);
+
+/// Links a time zone to an access_rule via `access_rule_time_zones`.
+/// LIVE_CONFIRMED verbatim shape.
+nlohmann::json buildAccessRuleTimeZoneLinkBody(int64_t accessRuleId, int64_t timeZoneId);
+
+/// Unlinks a time zone from an access_rule via `access_rule_time_zones`.
+/// LIVE_CONFIRMED verbatim shape.
+nlohmann::json buildAccessRuleTimeZoneUnlinkBody(int64_t accessRuleId, int64_t timeZoneId);
+
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
 
@@ -362,5 +417,6 @@ extern const std::vector<std::string> kUserRoleWritableFields;
 extern const std::vector<std::string> kVisitFields;
 extern const std::vector<std::string> kTimeSpanFields;
 extern const std::vector<std::string> kHolidayFields;
+extern const std::vector<std::string> kScheduledUnlockFields;
 
 }  // namespace amico::detail

@@ -305,6 +305,41 @@ public:
         AmicoClient* owner_;
     };
 
+    /// Typed read/write wrapper for the `scheduled_unlocks` object
+    /// plus its owned time-zone links (Scheduled Unlock write-side
+    /// plan, 2026-09-15). A link only ever exists in the context of a
+    /// scheduled unlock, same ownership precedent as UsersApi owning
+    /// card management.
+    class ScheduledUnlocksApi {
+    public:
+        std::vector<ScheduledUnlock> list();
+
+        /// POST /create_objects.fcgi. Returns the device-assigned id.
+        /// Never auto-links any time zone (spec.md Decision 1) --
+        /// call addTimeZone() afterward if needed.
+        int64_t create(const NewScheduledUnlock& unlock);
+        /// POST /modify_objects.fcgi. Throws ProtocolError if nothing changed.
+        void update(const ScheduledUnlockUpdate& unlock);
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if nothing
+        /// removed. Does NOT cascade-clean the backing access_rules/
+        /// scheduled_unlock_access_rules/access_rule_time_zones rows
+        /// (spec.md Decision 3 -- no cascade assumed without evidence).
+        void remove(int64_t id);
+
+        /// Links a time zone to a scheduled unlock. Auto-creates the
+        /// backing access_rules row on the first call for a given
+        /// scheduled unlock (spec.md Decision 2).
+        void addTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId);
+        /// Unlinks a time zone. Throws ProtocolError if the scheduled
+        /// unlock has no access_rules row at all (nothing was ever linked).
+        void removeTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId);
+
+    private:
+        friend class AmicoClient;
+        explicit ScheduledUnlocksApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
     UsersApi& users() { return usersApi_; }
     AccessLogsApi& accessLogs() { return accessLogsApi_; }
     PortalsApi& portals() { return portalsApi_; }
@@ -312,6 +347,7 @@ public:
     TimeZonesApi& timeZones() { return timeZonesApi_; }
     VisitsApi& visits() { return visitsApi_; }
     HolidaysApi& holidays() { return holidaysApi_; }
+    ScheduledUnlocksApi& scheduledUnlocks() { return scheduledUnlocksApi_; }
 
     /// Development/discovery use only -- returns the raw ~73KB object
     /// schema from POST /object_metadata.fcgi. Not part of the normal
@@ -326,6 +362,7 @@ private:
     friend class TimeZonesApi;
     friend class VisitsApi;
     friend class HolidaysApi;
+    friend class ScheduledUnlocksApi;
 
     /// Test-only seam: swaps the internal transport for a fake one so
     /// offline tests never touch a real socket. Declared here (not in a
@@ -376,6 +413,12 @@ private:
     int64_t createHolidayImpl(const NewHoliday& holiday);
     void updateHolidayImpl(const HolidayUpdate& holiday);
     void removeHolidayImpl(int64_t id);
+    std::vector<ScheduledUnlock> listScheduledUnlocksImpl();
+    int64_t createScheduledUnlockImpl(const NewScheduledUnlock& unlock);
+    void updateScheduledUnlockImpl(const ScheduledUnlockUpdate& unlock);
+    void removeScheduledUnlockImpl(int64_t id);
+    void addScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId);
+    void removeScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -387,6 +430,7 @@ private:
     TimeZonesApi timeZonesApi_{this};
     VisitsApi visitsApi_{this};
     HolidaysApi holidaysApi_{this};
+    ScheduledUnlocksApi scheduledUnlocksApi_{this};
 };
 
 /// See AmicoClient's friend declaration above. Defined in src/Client.cpp;

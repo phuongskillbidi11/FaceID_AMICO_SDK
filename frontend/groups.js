@@ -48,6 +48,7 @@ const PROTECTED_GROUP_ID = 1;
         actionButton(removeCell, "Remove", async () => {
           if (!window.confirm(`Remove group "${item.name}"? This permanently deletes the group and cannot be undone.`)) return;
           await apiFetch(`/groups/${item.id}`, { method: "DELETE" });
+          document.dispatchEvent(new Event("groups-changed"));
           await loadItems();
         }, true);
       }
@@ -93,6 +94,7 @@ const PROTECTED_GROUP_ID = 1;
         } else {
           await apiFetch(`/groups/${id}`, jsonOptions("PATCH", { name: name.value }));
         }
+        document.dispatchEvent(new Event("groups-changed"));
         dialog.close();
         await loadItems();
       });

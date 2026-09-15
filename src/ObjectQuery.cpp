@@ -40,6 +40,10 @@ const std::vector<std::string> kHolidayFields = {
     "id", "name", "start", "hol1", "hol2", "hol3", "repeats", "end",
 };
 
+const std::vector<std::string> kScheduledUnlockFields = {
+    "id", "name", "message",
+};
+
 nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
     nlohmann::json body;
     body["join"] = "LEFT";
@@ -325,6 +329,120 @@ nlohmann::json buildHolidayDeleteBody(int64_t id) {
     nlohmann::json body;
     body["object"] = "holidays";
     body["where"] = {{"holidays", {{"id", nlohmann::json::array({id})}}}};
+    return body;
+}
+
+nlohmann::json buildScheduledUnlocksListBody() {
+    nlohmann::json body;
+    body["object"] = "scheduled_unlocks";
+    body["fields"] = kScheduledUnlockFields;
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockCreateBody(const std::string& name, const std::string& message) {
+    // Verbatim shape captured live 2026-09-15 -- same extended shape
+    // as every other object this session.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "scheduled_unlocks";
+    body["fields"] = kScheduledUnlockFields;
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"name"});
+    body["values"] = nlohmann::json::array({{{"name", name}, {"message", message}}});
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockUpdateBody(int64_t id, const std::string& name, const std::string& message) {
+    nlohmann::json body;
+    body["object"] = "scheduled_unlocks";
+    body["values"] = {{"name", name}, {"message", message}};
+    body["where"] = {{"scheduled_unlocks", {{"id", id}}}};
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockDeleteBody(int64_t id) {
+    nlohmann::json body;
+    body["object"] = "scheduled_unlocks";
+    body["where"] = {{"scheduled_unlocks", {{"id", nlohmann::json::array({id})}}}};
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockTimeZoneIdsBody(int64_t scheduledUnlockId) {
+    // Verbatim shape captured live 2026-09-15 (fields trimmed to
+    // id-only -- the live capture also requested "name", which this
+    // SDK doesn't need here) -- the device resolves the
+    // access_rules/access_rule_time_zones join server-side given a
+    // cross-object where clause: where.object ("scheduled_unlocks")
+    // differs from the query's own top-level object ("time_zones").
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "time_zones";
+    body["fields"] = nlohmann::json::array({"id"});
+    body["where"] = nlohmann::json::array({
+        {{"object", "scheduled_unlocks"}, {"field", "id"}, {"value", scheduledUnlockId}, {"connector", ") AND ("}},
+    });
+    body["order"] = nlohmann::json::array({"name"});
+    body["limit"] = 1000;
+    body["offset"] = 0;
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockAccessRuleIdBody(int64_t scheduledUnlockId) {
+    // NOT independently live-captured -- inferred by symmetry with
+    // this session's established bare-object where shape (e.g.
+    // buildTimeSpansListBody). Confirm/adjust during this plan's own
+    // Group 7 (spec.md Decision 2, Risks).
+    nlohmann::json body;
+    body["object"] = "scheduled_unlock_access_rules";
+    body["fields"] = nlohmann::json::array({"access_rule_id"});
+    body["where"] = {{"scheduled_unlock_access_rules", {{"scheduled_unlock_id", scheduledUnlockId}}}};
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockAccessRuleCreateBody(int64_t scheduledUnlockId) {
+    // Verbatim shape captured live 2026-09-15 -- auto-generated name
+    // matches the device's own convention exactly.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "access_rules";
+    body["fields"] = nlohmann::json::array({"id", "name", "type", "priority"});
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"name"});
+    body["values"] = nlohmann::json::array({{
+        {"name", "(access_rules automatically created for scheduled_unlocks " + std::to_string(scheduledUnlockId) + ")"},
+        {"type", 1}, {"priority", 0},
+    }});
+    return body;
+}
+
+nlohmann::json buildScheduledUnlockAccessRuleLinkBody(int64_t scheduledUnlockId, int64_t accessRuleId) {
+    // Verbatim shape captured live 2026-09-15.
+    nlohmann::json body;
+    body["object"] = "scheduled_unlock_access_rules";
+    body["values"] = nlohmann::json::array({
+        {{"scheduled_unlock_id", scheduledUnlockId}, {"access_rule_id", accessRuleId}},
+    });
+    return body;
+}
+
+nlohmann::json buildAccessRuleTimeZoneLinkBody(int64_t accessRuleId, int64_t timeZoneId) {
+    // Verbatim shape captured live 2026-09-15.
+    nlohmann::json body;
+    body["object"] = "access_rule_time_zones";
+    body["values"] = nlohmann::json::array({
+        {{"access_rule_id", accessRuleId}, {"time_zone_id", timeZoneId}},
+    });
+    return body;
+}
+
+nlohmann::json buildAccessRuleTimeZoneUnlinkBody(int64_t accessRuleId, int64_t timeZoneId) {
+    // Verbatim shape captured live 2026-09-15.
+    nlohmann::json body;
+    body["object"] = "access_rule_time_zones";
+    body["where"] = nlohmann::json::array({
+        {{"object", "access_rule_time_zones"}, {"field", "access_rule_id"}, {"value", accessRuleId}},
+        {{"object", "access_rule_time_zones"}, {"field", "time_zone_id"}, {"value", nlohmann::json::array({timeZoneId})}},
+    });
     return body;
 }
 
