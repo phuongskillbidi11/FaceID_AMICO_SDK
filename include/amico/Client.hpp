@@ -184,11 +184,22 @@ public:
         AmicoClient* owner_;
     };
 
-    /// Typed wrapper over the internal load_objects.fcgi query engine for
-    /// the `groups` object.
+    /// Typed read/write wrapper for the `groups` object.
     class GroupsApi {
     public:
         std::vector<Group> list();
+
+        /// POST /create_objects.fcgi. Returns the device-assigned group id.
+        int64_t create(const NewGroup& group);
+        /// POST /modify_objects.fcgi. Throws ProtocolError if no group changed.
+        void update(const GroupUpdate& group);
+        /// POST /destroy_objects.fcgi. Throws ProtocolError if no group
+        /// removed. This SDK does not special-case any group id
+        /// (including the real UI's own protected id-1 default group) --
+        /// see .plans/2026-09-15-groups-write-side/spec.md Decision 2; if
+        /// the device itself rejects the write, that surfaces as a normal
+        /// ProtocolError like any other rejected write.
+        void remove(int64_t id);
 
     private:
         friend class AmicoClient;
@@ -295,6 +306,9 @@ private:
     int64_t accessLogsCountImpl(const AccessLogQuery& query);
     std::vector<Portal> listPortalsImpl();
     std::vector<Group> listGroupsImpl();
+    int64_t createGroupImpl(const NewGroup& group);
+    void updateGroupImpl(const GroupUpdate& group);
+    void removeGroupImpl(int64_t id);
     std::vector<TimeZone> listTimeZonesImpl();
     std::map<int64_t, std::string> timeZoneNamesForAccessLogIdsImpl(const std::vector<int64_t>& accessLogIds);
     std::vector<Visit> listVisitsImpl(const VisitQuery& query);

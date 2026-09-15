@@ -151,4 +151,17 @@ amico::VisitUpdate fromJsonVisitUpdate(int64_t id, const nlohmann::json& body) {
     return update;
 }
 
+amico::NewGroup fromJsonNewGroup(const nlohmann::json& body) {
+    amico::NewGroup group;
+    group.name = body.at("name").get<std::string>();
+    return group;
+}
+
+amico::GroupUpdate fromJsonGroupUpdate(int64_t id, const nlohmann::json& body) {
+    amico::GroupUpdate update;
+    update.id = id;
+    update.name = body.at("name").get<std::string>();
+    return update;
+}
+
 }  // namespace amico::backend

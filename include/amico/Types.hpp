@@ -221,11 +221,30 @@ struct TimeZone {
 };
 
 /// Public view of the `groups` object (name only — same minimal-
-/// surface rationale as Portal/TimeZone; list-only, used to populate
-/// the Access (Global) report's Group filter -- see
+/// surface rationale as Portal/TimeZone; originally list-only, used to
+/// populate the Access (Global) report's Group filter -- see
 /// .plans/2026-09-14-access-global-report-full-parity-reports/spec.md
-/// Decision 1). No create/update/remove -- out of this SDK's scope.
+/// Decision 1). Create/update/remove added by the
+/// 2026-09-15-groups-write-side plan -- see `NewGroup`/`GroupUpdate`
+/// below.
 struct Group {
+    int64_t id = 0;
+    std::string name;
+};
+
+/// Creation parameters for the `groups` object. LIVE_CONFIRMED
+/// 2026-09-15 via XHR-interceptor capture of the real device's own
+/// Add Group form -- see
+/// .plans/2026-09-15-groups-write-side/spec.md Background.
+struct NewGroup {
+    std::string name;
+};
+
+/// Update parameters for the `groups` object. `name` is the only
+/// writable field the device exposes for this object -- unlike
+/// `UserUpdate`/`VisitUpdate`, there is no meaningful "partial" update
+/// here.
+struct GroupUpdate {
     int64_t id = 0;
     std::string name;
 };

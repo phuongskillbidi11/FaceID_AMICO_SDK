@@ -474,13 +474,35 @@ device's own filters — visitor's name/id/card — are documented but not
 wired into this endpoint), and a "show finished visits" history view.
 
 ### `GET /groups`
-Session required. Read-only list of group IDs and names; no pagination or
-write operations on this route. `200` response:
+Session required. Read-only list of group IDs and names; no pagination
+on this route (write operations are separate routes, below). `200`
+response:
 ```json
 {"groups": [{"id": 1, "name": "Staff"}]}
 ```
 An empty list returns `{"groups": []}`. The SDK requests only `id` and
 `name` from the device's `groups` object, with no `where` constraint.
+
+### `POST /groups`
+Body: `{"name": "<group name>"}`. `201 {"id": <new group id>}`.
+
+### `PATCH /groups/:id`
+Body: `{"name": "<new name>"}` -- `name` is the only writable field on
+this object, so (unlike `/users`/`/visits`) there is no meaningful
+partial update; always send the full new name. `200 {"success": true}`.
+
+### `DELETE /groups/:id`
+`200 {"success": true}`.
+
+**Protected group note:** the real device's own web UI disables
+editing/removing whichever group has id 1 on this device (a built-in
+default, e.g. "Standard" -- `class.js`'s `noSave:[1]`). This backend
+does **not** replicate that restriction server-side -- it is unconfirmed
+whether the device's own API enforces it or only its own UI merely
+chooses not to offer the controls. A caller hitting `PATCH`/`DELETE`
+against that id gets whatever the device itself does (success, or a
+rejected-write error surfaced the normal way) -- this backend does not
+invent an extra guard the device may not have.
 
 ### `GET /timezones`
 Session required. Read-only list of time-zone IDs and names, using the

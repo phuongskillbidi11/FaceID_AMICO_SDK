@@ -129,6 +129,35 @@ nlohmann::json buildGroupsListBody() {
     return body;
 }
 
+nlohmann::json buildGroupCreateBody(const std::string& name) {
+    // Verbatim shape captured live 2026-09-15 -- includes
+    // join/fields/where/order alongside "values", same as
+    // buildVisitCreateBody.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "groups";
+    body["fields"] = nlohmann::json::array({"id", "name"});
+    body["where"] = nlohmann::json::array();
+    body["order"] = nlohmann::json::array({"name"});
+    body["values"] = nlohmann::json::array({{{"name", name}}});
+    return body;
+}
+
+nlohmann::json buildGroupUpdateBody(int64_t id, const std::string& name) {
+    nlohmann::json body;
+    body["object"] = "groups";
+    body["values"] = {{"name", name}};
+    body["where"] = {{"groups", {{"id", id}}}};
+    return body;
+}
+
+nlohmann::json buildGroupDeleteBody(int64_t id) {
+    nlohmann::json body;
+    body["object"] = "groups";
+    body["where"] = {{"groups", {{"id", nlohmann::json::array({id})}}}};
+    return body;
+}
+
 nlohmann::json buildTimeZonesListBody() {
     nlohmann::json body;
     body["object"] = "time_zones";

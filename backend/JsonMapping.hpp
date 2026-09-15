@@ -37,5 +37,7 @@ amico::NewVisit fromJsonNewVisit(const nlohmann::json& body);
 /// (.plans/2026-09-14-implement-visits-enroll-visits-crud/spec.md
 /// Decision 4).
 amico::VisitUpdate fromJsonVisitUpdate(int64_t id, const nlohmann::json& body);
+amico::NewGroup fromJsonNewGroup(const nlohmann::json& body);
+amico::GroupUpdate fromJsonGroupUpdate(int64_t id, const nlohmann::json& body);
 
 }  // namespace amico::backend

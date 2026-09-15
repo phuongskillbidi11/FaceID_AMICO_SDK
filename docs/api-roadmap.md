@@ -115,7 +115,7 @@ scope cut, not an oversight.
 
 ---
 
-## 5. Groups (Enroll → Groups) — read ✅ Implemented, write 📋 Planned
+## 5. Groups (Enroll → Groups) — ✅ Implemented (read + write, 2026-09-15)
 
 Device protocol `LIVE_CONFIRMED` (`docs/ui-action-protocol-map.md`
 "Groups" section): `object:"groups"`, `fields:["id","name"]`, same
@@ -125,16 +125,17 @@ list/count/pagination pattern as Users.
 |---|---|---|
 | ✅ | `GET /groups` | `load_objects.fcgi` `object:"groups"` — implemented 2026-09-14 for the Access (Global) report's Group filter (`docs/backend-api.md`). Name-only, no pagination (this device has few enough groups that the full list is always returned). |
 | 📋 | `GET /groups/:id` | same, filtered by id — not yet needed by any UI, not implemented |
-| 📋 | `POST /groups` | `create_objects.fcgi` against `groups` (write side not yet `JS_CONFIRMED` — confirm the exact field name before implementing) |
-| 📋 | `PATCH /groups/:id` | `modify_objects.fcgi` (write side not yet `JS_CONFIRMED`) |
-| 📋 | `DELETE /groups/:id` | `destroy_objects.fcgi` (write side not yet `JS_CONFIRMED`) |
+| ✅ | `POST /groups` | `create_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15 via XHR-interceptor capture: `{"join":"LEFT","object":"groups","fields":["id","name"],"where":[],"order":["name"],"values":[{"name":"<name>"}]}` — same extended shape as Visits' own create, not Users' leaner shape. See `.plans/2026-09-15-groups-write-side/`. |
+| ✅ | `PATCH /groups/:id` | `modify_objects.fcgi` — built by symmetry with the shared `messenger.js` mechanism (same code path already `LIVE_CONFIRMED` for Users/Visits); independently live-confirmed for `groups` specifically in this plan's own Group 8 |
+| ✅ | `DELETE /groups/:id` | `destroy_objects.fcgi` — same confirmation status as `PATCH` above |
 
-**Before implementing the rest:** the *write* side of Groups (create/
-rename/delete a group itself, as opposed to adding a user to an
-existing group id, which is already implemented) has not been
-statically confirmed via `group.js` yet — only the read/list shape is
-`LIVE_CONFIRMED` (and now implemented). Do one short discovery pass on
-`group.js` first.
+**Protected group id 1** ("Standard" on this device): the real UI's
+own `class.js` (`groupsData.noSave = [1]`) disables editing/removing
+whichever group has id 1 — confirmed live (its Name field renders
+`disabled="disabled"`; "Everywhere", id 2, does not). This is a
+client-side-only restriction as far as confirmed; the implementation
+does not replicate it server-side (see spec.md Decision 2) — only the
+frontend mirrors it defensively.
 
 ## 6. Time Zones (Enroll → Time Zones) — read ✅ Implemented, write 📋 Planned
 
@@ -318,27 +319,28 @@ pass) confirms the real object names/fields/commands.
 ## Suggested next discovery pass
 
 Within **Enroll** specifically (the sidebar area this project has
-focused on so far — Users ✅, Visitors ✅, Groups/Time Zones read ✅,
-Visits ✅ implemented 2026-09-14 — see section 6b), the remaining
-items in the real device's own Enroll submenu, in sidebar order:
+focused on so far — Users ✅, Visitors ✅, Groups ✅ (read+write,
+2026-09-15), Visits ✅ implemented 2026-09-14 — see sections 5/6b), the
+remaining items in the real device's own Enroll submenu, in sidebar
+order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | Groups (write side: create/rename/delete a group) | 📋 evidence-backed but unconfirmed write shape — see section 5 |
-| 2 | Time Zones (write side + `time_spans` detail) | 📋 evidence-backed but unconfirmed write shape — see section 6 |
-| 3 | Holidays (`holiday.html`) | 🔍 discovery pending — likely small, similar shape to `time_spans` |
-| 4 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
-| 5 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
-| 6 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
+| 1 | Time Zones (write side + `time_spans` detail) | 📋 evidence-backed but unconfirmed write shape — see section 6 |
+| 2 | Holidays (`holiday.html`) | 🔍 discovery pending — likely small, similar shape to `time_spans` |
+| 3 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
+| 4 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
+| 5 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
 
-**Recommended next single step:** Visits' full CRUD + Finish action is
-now implemented (SDK/backend/frontend/tests — section 6b); only a
-gated live device check remains
-(`.plans/2026-09-14-implement-visits-enroll-visits-crud/tasks.md`
-Group 8) to close it out completely, including confirming the one
-still-uncaptured `modify_objects.fcgi` edit payload. Otherwise, moving
-on to Groups/Time Zones' write side per rows 1-2 above is the other
-ready-to-plan option.
+**Recommended next single step:** Groups' write side (create/rename/
+delete) is now implemented (SDK/backend/frontend/tests — section 5);
+only the gated Group 8 live test remains to independently confirm the
+`modify_objects.fcgi`/`destroy_objects.fcgi` shapes (currently inferred
+by symmetry with the already-proven shared mechanism) — see
+`.plans/2026-09-15-groups-write-side/tasks.md`. Otherwise, Time Zones'
+write side per row 1 above is the next ready-to-plan item — already an
+evidence-backed read, just needs a short discovery pass on its write
+shape (and the `time_spans` detail object) first.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings

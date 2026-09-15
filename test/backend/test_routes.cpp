@@ -715,6 +715,48 @@ TEST_CASE("GET /groups and /timezones expose name-only lists, including empty li
     }
 }
 
+TEST_CASE("T-1: POST /groups creates a group and returns the new id") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/create_objects.fcgi" && body["object"] == "groups") {
+            CHECK(body["values"][0]["name"] == "ZZ_TestGroup");
+            return FakeTransport::ok(R"({"ids":[7]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/groups", R"({"name":"ZZ_TestGroup"})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 7);
+}
+
+TEST_CASE("T-2: PATCH /groups/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/modify_objects.fcgi" && body["object"] == "groups") {
+            CHECK(body["values"]["name"] == "Renamed");
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/groups/1", R"({"name":"Renamed"})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("T-3: DELETE /groups/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"changes": 1})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/groups/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);

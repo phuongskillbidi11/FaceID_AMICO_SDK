@@ -702,6 +702,37 @@ struct AmicoClient::Impl {
         return result;
     }
 
+    int64_t createGroup(const NewGroup& group) {
+        nlohmann::json body = detail::buildGroupCreateBody(group.name);
+        nlohmann::json response = postAuthenticatedJson("/create_objects.fcgi", body);
+
+        nlohmann::json ids = requireField<nlohmann::json>(response, "ids", "/create_objects.fcgi");
+        if (!ids.is_array() || ids.empty() || !ids.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        return ids.front().get<int64_t>();
+    }
+
+    void updateGroup(const GroupUpdate& group) {
+        nlohmann::json body = detail::buildGroupUpdateBody(group.id, group.name);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeGroup(int64_t id) {
+        nlohmann::json body = detail::buildGroupDeleteBody(id);
+        nlohmann::json response = postAuthenticatedJson("/destroy_objects.fcgi", body);
+
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/destroy_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /destroy_objects.fcgi");
+        }
+    }
+
     std::vector<TimeZone> listTimeZones() {
         nlohmann::json body = detail::buildTimeZonesListBody();
         nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
@@ -999,6 +1030,9 @@ std::vector<AccessLogEntry> AmicoClient::listAccessLogsImpl(const AccessLogQuery
 int64_t AmicoClient::accessLogsCountImpl(const AccessLogQuery& query) { return impl_->accessLogsCount(query); }
 std::vector<Portal> AmicoClient::listPortalsImpl() { return impl_->listPortals(); }
 std::vector<Group> AmicoClient::listGroupsImpl() { return impl_->listGroups(); }
+int64_t AmicoClient::createGroupImpl(const NewGroup& group) { return impl_->createGroup(group); }
+void AmicoClient::updateGroupImpl(const GroupUpdate& group) { impl_->updateGroup(group); }
+void AmicoClient::removeGroupImpl(int64_t id) { impl_->removeGroup(id); }
 std::vector<TimeZone> AmicoClient::listTimeZonesImpl() { return impl_->listTimeZones(); }
 std::map<int64_t, std::string> AmicoClient::timeZoneNamesForAccessLogIdsImpl(const std::vector<int64_t>& accessLogIds) {
     return impl_->timeZoneNamesForAccessLogIds(accessLogIds);
@@ -1035,6 +1069,9 @@ std::vector<AccessLogEntry> AmicoClient::AccessLogsApi::list(const AccessLogQuer
 int64_t AmicoClient::AccessLogsApi::accessLogsCount(const AccessLogQuery& query) { return owner_->accessLogsCountImpl(query); }
 std::vector<Portal> AmicoClient::PortalsApi::list() { return owner_->listPortalsImpl(); }
 std::vector<Group> AmicoClient::GroupsApi::list() { return owner_->listGroupsImpl(); }
+int64_t AmicoClient::GroupsApi::create(const NewGroup& group) { return owner_->createGroupImpl(group); }
+void AmicoClient::GroupsApi::update(const GroupUpdate& group) { owner_->updateGroupImpl(group); }
+void AmicoClient::GroupsApi::remove(int64_t id) { owner_->removeGroupImpl(id); }
 std::vector<TimeZone> AmicoClient::TimeZonesApi::list() { return owner_->listTimeZonesImpl(); }
 std::map<int64_t, std::string> AmicoClient::AccessLogsApi::timeZoneNamesForAccessLogIds(const std::vector<int64_t>& accessLogIds) {
     return owner_->timeZoneNamesForAccessLogIdsImpl(accessLogIds);

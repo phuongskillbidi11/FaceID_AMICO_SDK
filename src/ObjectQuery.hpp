@@ -55,6 +55,26 @@ nlohmann::json buildPortalsListBody();
 nlohmann::json buildGroupsListBody();
 nlohmann::json buildTimeZonesListBody();
 
+/// Single-group creation body for `create_objects.fcgi`.
+/// LIVE_CONFIRMED wire shape 2026-09-15 via XHR-interceptor capture
+/// (.plans/2026-09-15-groups-write-side/spec.md Background):
+/// `join:"LEFT"`, `fields:["id","name"]`, `where:[]`, `order:["name"]`,
+/// one-element `values` array -- same extended shape as
+/// buildVisitCreateBody, NOT the leaner buildUserCreateBody shape.
+nlohmann::json buildGroupCreateBody(const std::string& name);
+
+/// Single-group rename body for `modify_objects.fcgi`. NOT
+/// independently live-captured for `groups` specifically -- built by
+/// symmetry with buildUserUpdateBody/buildVisitUpdateBody's confirmed
+/// bare-object `values` + scalar `where.id` shape, both proven against
+/// the same shared `messenger.js` mechanism `groups` also uses (spec.md
+/// Background). Confirm during this plan's own Group 8 live check.
+nlohmann::json buildGroupUpdateBody(int64_t id, const std::string& name);
+
+/// Single-group deletion body for `destroy_objects.fcgi`. Same
+/// not-yet-independently-confirmed caveat as buildGroupUpdateBody.
+nlohmann::json buildGroupDeleteBody(int64_t id);
+
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
 

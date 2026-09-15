@@ -323,3 +323,14 @@ TEST_CASE("Q-11: kVisitFields never includes password/salt/panic_password/panic_
         CHECK(field != "panic_salt");
     }
 }
+
+TEST_CASE("Q-12 (Groups write-side plan, 2026-09-15): no new groups builder accepts a caller-supplied object/field/connector string") {
+    // buildGroupCreateBody/UpdateBody/DeleteBody (ObjectQuery.hpp) all
+    // take only int64_t/std::string VALUE parameters -- never a
+    // field/object/connector name. This is a compile-time fact verified
+    // by their signatures; no runtime assertion is meaningful here
+    // (same pattern as "scenario 18"/Q-9 above).
+    CHECK(detail::buildGroupCreateBody("Test")["object"] == "groups");
+    CHECK(detail::buildGroupUpdateBody(1, "Test")["object"] == "groups");
+    CHECK(detail::buildGroupDeleteBody(1)["object"] == "groups");
+}

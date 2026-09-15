@@ -908,6 +908,69 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
             respondError(res, e);
         }
     });
+    // Groups write side (2026-09-15-groups-write-side) -- this SDK does
+    // not special-case the real UI's own protected id-1 default group;
+    // a rejected write there surfaces as a normal ProtocolError, same
+    // as any other rejected write. See spec.md Decision 2.
+    svr.Post("/groups", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::NewGroup newGroup;
+        try {
+            newGroup = fromJsonNewGroup(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            int64_t id = client.groups().create(newGroup);
+            res.status = 201;
+            res.set_content(nlohmann::json{{"id", id}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Patch(R"(/groups/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::GroupUpdate update;
+        try {
+            int64_t id = std::stoll(req.matches[1]);
+            update = fromJsonGroupUpdate(id, nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.groups().update(update);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Delete(R"(/groups/(\d+))", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t id = 0;
+        try {
+            id = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            client.groups().remove(id);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/timezones", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;
