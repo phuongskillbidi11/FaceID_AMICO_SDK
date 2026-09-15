@@ -115,7 +115,36 @@ scope cut, not an oversight.
 
 ---
 
-## 5. Groups (Enroll → Groups) — ✅ Implemented (read + write, 2026-09-15)
+## 5. Groups (Enroll → Groups) — ✅ Implemented (read + write, 2026-09-15) — ⚠️ known gap found 2026-09-15
+
+**Known gap found during Scheduled Unlock discovery (2026-09-15):**
+the real device's own Group Edit page has **3 tabs — General, Users,
+Time Zones —** but this project's shipped Groups write-side plan
+(`fe1e4d9`) only implemented General (the `name` field). Confirmed
+live via `group.html`:
+- **"Users" tab — not a gap.** Same underlying `user_groups`
+  relationship already fully covered by
+  `UsersApi::addToGroup()`/`removeFromGroup()` (shipped, Users
+  section). This tab is only an alternate UI surface (manage
+  membership from the Group's own page instead of the User's) — a
+  possible frontend nicety, not a missing SDK/backend capability.
+- **"Time Zones" tab — a real gap.** Groups link to time zones through
+  the exact same `access_rules`/`access_rule_time_zones` mechanism
+  documented in section 10b for Scheduled Unlock (`class.js`'s
+  `groupsData.fields.time_zones`, client-side-only registration,
+  `intermediateTable: access_rule_time_zones`,
+  `intermediateTableBy: [portal_access_rules, group_access_rules]`).
+  The real device's own Groups list even has a "Nº of Time Zones"
+  column ("Everywhere": 1, "Standard": 0) that this project's `GET
+  /groups` response has no equivalent field for. **Not implemented at
+  all** in this project — no SDK type, no route, no frontend tab.
+  Given section 10b's Scheduled Unlock discovery already confirmed the
+  exact `create_objects.fcgi`/`destroy_objects.fcgi` shapes for the
+  underlying `access_rule_time_zones` link (just via
+  `group_access_rules` instead of `scheduled_unlock_access_rules` as
+  the other half of the join), this should be a fast follow-up once
+  Scheduled Unlock's own write side is planned/implemented, reusing
+  the same access_rules-linking pattern.
 
 Device protocol `LIVE_CONFIRMED` (`docs/ui-action-protocol-map.md`
 "Groups" section): `object:"groups"`, `fields:["id","name"]`, same
@@ -320,6 +349,121 @@ inventing a feature the real device doesn't expose as a page.
 
 ---
 
+## 10b. Scheduled Unlock (Enroll → Scheduled Unlock) — 🔍 discovery complete, ready to plan (2026-09-15)
+
+**More complex than Groups/Time Zones/Holidays — not a simple lookup
+object.** `LIVE_CONFIRMED` via `class.js`'s `CID.createClass` static
+read plus a live-captured create (XHR-interceptor, safely blocked, no
+real write) and a full real gated write/read/delete cycle
+(`APPROVE_LIVE_DEVICE_TEST:2026-09-15-scheduled-unlock` +
+`APPROVE_LIVE_DEVICE_WRITE_TEST:2026-09-15-scheduled-unlock`, both
+user-approved verbatim).
+
+Device object `scheduled_unlocks` has only 3 real fields: `id`,
+`name`, `message`. The "Time Zones" shown on its own list/edit UI is
+**not a real column** — it's a composite (`isField:false`) resolved
+through a 2-hop join chain declared in `class.js`:
+- `scheduled_unlocks` ↔ `access_rules` (via `scheduled_unlock_access_rules`)
+- `access_rules` ↔ `portals` (via `portal_access_rules`)
+- `access_rules` ↔ `time_zones` (via `access_rule_time_zones`, the
+  same join table already used for the Access Logs time-zone-name
+  resolution — see section 3's Decision 2b)
+
+**Confirmed create payload** (same extended shape as every other
+object this session):
+```json
+{"join":"LEFT","object":"scheduled_unlocks","fields":["id","name","message"],
+ "where":[],"order":["name"],
+ "values":[{"name":"ZZ_ScheduledUnlockTest","message":"Test message"}]}
+```
+
+**New finding — the device's query engine supports cross-object
+`where` for this composite relationship, resolved server-side in one
+call.** Reading the "Linked" time-zone list for a scheduled unlock
+sends `object:"time_zones"` with a `where` clause referencing a
+*different* object:
+```json
+{"join":"LEFT","object":"time_zones","fields":["id","name"],
+ "where":[{"object":"scheduled_unlocks","field":"id","value":1,"connector":") AND ("}],
+ "order":["name"],"limit":1000,"offset":0}
+```
+This is the first time this session that `where.object` differs from
+the query's own top-level `object` and the device resolves the
+multi-hop join itself server-side — worth flagging for whoever plans
+the SDK-side builder, since it doesn't match this project's existing
+`buildAccessLogAccessRulesBody`/`buildAccessRuleTimeZonesBody` 2-call
+pattern (which resolves the same underlying join client-side, in 2
+separate requests).
+
+**New finding — a new Scheduled Unlock is auto-linked to time zone id
+1 by default on creation**, with no separate write call ever observed
+at first (only visible via the resulting "Nº of Time Zones: 1" and the
+"Linked" list already containing "Always Allowed"). This matches
+`class.js`'s own `'time_zones': {'value': [1], ...}` default.
+
+**Full link mechanism now `LIVE_CONFIRMED`** (2026-09-15, second gated
+write pass: temporarily created a second time zone, "ZZ_TempTZ2", via
+the already-implemented Time Zones write side purely to have something
+to link/unlink; both the time zone and the scheduled unlock were fully
+deleted afterward — no lasting device change). Saving a **new**
+Scheduled Unlock for the first time fires this exact sequence, all via
+`create_objects.fcgi`:
+1. `{"object":"scheduled_unlocks","fields":["id","name","message"],...,"values":[{"name":"...","message":"..."}]}` → creates the base row (e.g. id 2).
+2. `{"object":"access_rules","fields":["id","name","type","priority"],...,"values":[{"name":"(access_rules automatically created for scheduled_unlocks 2)","type":1,"priority":0}]}` → **one `access_rules` row is auto-created per scheduled_unlock** (1:1, not one per portal/time-zone combination as the `intermediateTableBy` chain in `class.js` might suggest) — the name is literally auto-generated referencing the scheduled_unlock's own id.
+3. `{"object":"scheduled_unlock_access_rules","values":[{"scheduled_unlock_id":2,"access_rule_id":4}]}` → links the new access_rule to the scheduled_unlock.
+4. `{"object":"access_rule_time_zones","values":[{"access_rule_id":4,"time_zone_id":1}]}` → links the default time zone (id 1) to that access_rule.
+5. One more `access_rule_time_zones` create per additional time zone selected in the "Linked" list at save time (e.g. `{"access_rule_id":4,"time_zone_id":3}` for the manually-added "ZZ_TempTZ2").
+
+**Removing one linked time zone** from an existing Scheduled Unlock
+(moving it from "Linked" back to "Available", then Save) sends a
+single `destroy_objects.fcgi`:
+```json
+{"object":"access_rule_time_zones",
+ "where":[{"object":"access_rule_time_zones","field":"access_rule_id","value":4},
+          {"object":"access_rule_time_zones","field":"time_zone_id","value":[1]}]}
+```
+i.e. deletes by `(access_rule_id, time_zone_id)` pair — the
+`access_rules`/`scheduled_unlock_access_rules` rows themselves are
+left untouched; only the specific `access_rule_time_zones` link row is
+removed. **Not observed:** what happens to `access_rules`/
+`scheduled_unlock_access_rules` when a Scheduled Unlock itself is
+deleted (whether they cascade or become orphaned) — the delete flow
+for `scheduled_unlocks` itself was not captured this pass (out of
+scope for this discovery cycle; capture during the eventual write-side
+plan's own Group 8).
+**Not observed:** any `portal_access_rules` write — this device has
+only one portal, so it may be auto-included without a distinct write,
+or portal selection may live on a different tab not explored here
+(the UI only exposed a "Time Zones" tab, no visible "Portals" tab).
+
+**Disposable test record cleanup:** "ZZ_ScheduledUnlockTest" was
+created, inspected, then fully deleted via the real device's own
+two-step Remove flow (toggle row -> toolbar Remove -> confirm modal) —
+confirmed by reload showing "No record found." again. No lasting
+change to the device.
+
+**Disposable test records cleanup (second pass):** "ZZ_TempTZ2" (a
+temporary second time zone, created solely to have something to
+link/unlink) and "ZZ_SUTest2" (a second disposable scheduled unlock)
+were both created, fully exercised (link added, link removed), and
+fully deleted afterward via each object's own real device UI flow —
+confirmed by both lists reverting to their pre-test state (1 time
+zone: "Always Allowed"; 0 scheduled unlocks). No lasting change to the
+device.
+
+**Ready to plan** — the base object, create shape, and the full
+add/remove-time-zone-link mechanism (including the auto-created
+`access_rules`/`scheduled_unlock_access_rules` rows) are now all
+`LIVE_CONFIRMED`. The only remaining unknowns (delete-cascade behavior
+for `access_rules`/`scheduled_unlock_access_rules`, and whether
+`portal_access_rules` needs its own write on a multi-portal device) are
+narrow enough to defer to the eventual plan's own Group 8/manual live
+verification, matching this project's established practice of not
+over-speccing unconfirmed cascade behavior up front (same precedent as
+`DELETE /timezones/:id` not asserting `time_spans` cascade).
+
+---
+
 ## 11. 🔍 Discovery pending — no protocol evidence yet
 
 These sidebar areas exist on the real device but have **not** been
@@ -329,7 +473,6 @@ pass) confirms the real object names/fields/commands.
 
 | Sidebar area | Likely difficulty | Notes |
 |---|---|---|
-| Scheduled Unlock (`scheduledunlock.html`) | Medium — likely depends on Time Zones + Groups/Portals | |
 | User Types (`usertypes.html`) | Low — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) | |
 | Custom Fields (`customfields.html`) | Low-Medium | |
 | Internal Alarms (`alarmint.html`) | Medium | |
@@ -352,17 +495,21 @@ in the real device's own Enroll submenu, in sidebar order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | Scheduled Unlock (`scheduledunlock.html`) | 🔍 discovery pending — likely depends on Time Zones + Groups |
+| 1 | Scheduled Unlock (`scheduledunlock.html`) | ✅ discovery complete (section 10b) — base object, create shape, and the full add/remove-time-zone-link mechanism are all `LIVE_CONFIRMED`; ready for a spec/plan |
 | 2 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
 | 3 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
 
-**Recommended next single step:** Holidays' write side (create/update/
-delete) is now implemented (SDK/backend/frontend/tests — section 6c);
-only the gated Group 7 live test remains to independently confirm the
-`modify_objects.fcgi`/`destroy_objects.fcgi` shapes (currently inferred
-by symmetry with the already-proven shared mechanism) — see
-`.plans/2026-09-15-holidays-write-side/tasks.md`. Otherwise, Scheduled
-Unlock per row 1 above is the next item needing a discovery pass.
+**Recommended next single step:** Write the spec/plan for Scheduled
+Unlock (section 10b) — full CRUD for the base `name`/`message` fields
+plus add/remove time-zone linking, mirroring the already-confirmed
+`create_objects.fcgi`/`destroy_objects.fcgi` shapes. Decide during
+planning whether to auto-create the `access_rules`/
+`scheduled_unlock_access_rules` rows transparently (matching the real
+device's own UI behavior) or expose them as a more explicit concept —
+this project's existing precedent (e.g. Holidays' `end` field) favors
+hiding derived/plumbing writes from the caller wherever the real UI
+also hides them. Otherwise, User Types per row 2 above is the next
+item needing a discovery pass.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings
