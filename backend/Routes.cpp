@@ -174,6 +174,20 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Date and Time settings (2026-09-16-date-time-settings-read) --
+    // read-only, no X-Confirm-Sensitive-Action header (nothing here
+    // mutates device state).
+    svr.Get("/settings/date-time", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            res.set_content(toJson(client.getDateTimeSettings()).dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/users", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

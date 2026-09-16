@@ -78,6 +78,20 @@ bool requireBoolLikeField(const nlohmann::json& j, const char* key, const std::s
     throw ProtocolError(std::string("field '") + key + "' had an unexpected type in response from " + path);
 }
 
+/// Reads a boolean-ish field stored as a JSON *string* "0"/"1" --
+/// LIVE_CONFIRMED convention for get_configuration.fcgi's own
+/// ntp.enabled/general.clock_12h_format/general.month_day_year_format
+/// fields (Date and Time settings plan, 2026-09-16, spec.md
+/// Decision 3) -- distinct from requireBoolLikeField()'s own
+/// boolean-or-0/1-integer convention. Throws ProtocolError for any
+/// value other than "0"/"1".
+bool requireStringBoolField(const nlohmann::json& j, const char* key, const std::string& path) {
+    std::string value = requireField<std::string>(j, key, path);
+    if (value == "1") return true;
+    if (value == "0") return false;
+    throw ProtocolError(std::string("field '") + key + "' was not \"0\" or \"1\" in response from " + path);
+}
+
 /// Generates a unique-enough dynamic table name for a new user type,
 /// mirroring the device's own `_<sanitized-name><5-digit-suffix>`
 /// convention (User Types write-side plan, 2026-09-16, spec.md
@@ -388,6 +402,32 @@ struct AmicoClient::Impl {
         info.network.selfSignedCertificate = requireField<bool>(net, "self_signed_certificate", "/system_information.fcgi");
         info.network.dhcpEnabled = requireField<bool>(net, "dhcp_enabled", "/system_information.fcgi");
         return info;
+    }
+
+    DateTimeSettings getDateTimeSettings() {
+        DateTimeSettings settings;
+
+        nlohmann::json sysInfo = postAuthenticatedJson("/system_information.fcgi", nullptr);
+        settings.time = requireField<int64_t>(sysInfo, "time", "/system_information.fcgi");
+        settings.daylightSavingActive = requireField<bool>(sysInfo, "daylight_savings_time_active", "/system_information.fcgi");
+
+        nlohmann::json ntpBody = {{"ntp", nlohmann::json::array({"enabled", "timezone"})}};
+        nlohmann::json ntpResponse = postAuthenticatedJson("/get_configuration.fcgi", ntpBody);
+        nlohmann::json ntpSection = requireField<nlohmann::json>(ntpResponse, "ntp", "/get_configuration.fcgi");
+        settings.ntpEnabled = requireStringBoolField(ntpSection, "enabled", "/get_configuration.fcgi (ntp)");
+        settings.timezone = requireField<std::string>(ntpSection, "timezone", "/get_configuration.fcgi (ntp)");
+
+        nlohmann::json generalBody = {{"general", nlohmann::json::array({"clock_12h_format", "month_day_year_format"})}};
+        nlohmann::json generalResponse = postAuthenticatedJson("/get_configuration.fcgi", generalBody);
+        nlohmann::json generalSection = requireField<nlohmann::json>(generalResponse, "general", "/get_configuration.fcgi");
+        settings.clock12HourFormat = requireStringBoolField(generalSection, "clock_12h_format", "/get_configuration.fcgi (general)");
+        settings.monthDayYearFormat = requireStringBoolField(generalSection, "month_day_year_format", "/get_configuration.fcgi (general)");
+
+        nlohmann::json ntpServerResponse = postAuthenticatedJson("/get_ntp_server.fcgi", nlohmann::json::object());
+        settings.ntpServer1 = requireField<std::string>(ntpServerResponse, "server1", "/get_ntp_server.fcgi");
+        settings.ntpServer2 = requireField<std::string>(ntpServerResponse, "server2", "/get_ntp_server.fcgi");
+
+        return settings;
     }
 
     void logout() {
@@ -1850,6 +1890,8 @@ void AmicoClient::login() { impl_->login(); }
 void AmicoClient::checkReachable() const { impl_->checkReachable(); }
 bool AmicoClient::isSessionValid() { return impl_->isSessionValid(); }
 SystemInformation AmicoClient::getSystemInformation() { return impl_->getSystemInformation(); }
+DateTimeSettings AmicoClient::getDateTimeSettings() { return getDateTimeSettingsImpl(); }
+DateTimeSettings AmicoClient::getDateTimeSettingsImpl() { return impl_->getDateTimeSettings(); }
 void AmicoClient::logout() { impl_->logout(); }
 std::string AmicoClient::debugGetObjectMetadataJson() { return impl_->debugGetObjectMetadataJson(); }
 

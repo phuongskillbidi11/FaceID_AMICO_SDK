@@ -87,6 +87,15 @@ nlohmann::json toJson(const amico::SystemInformation& info) {
     return j;
 }
 
+nlohmann::json toJson(const amico::DateTimeSettings& settings) {
+    return {
+        {"time", settings.time}, {"daylightSavingActive", settings.daylightSavingActive},
+        {"ntpEnabled", settings.ntpEnabled}, {"timezone", settings.timezone},
+        {"clock12HourFormat", settings.clock12HourFormat}, {"monthDayYearFormat", settings.monthDayYearFormat},
+        {"ntpServer1", settings.ntpServer1}, {"ntpServer2", settings.ntpServer2},
+    };
+}
+
 nlohmann::json toJson(const amico::Holiday& holiday) {
     return {
         {"id", holiday.id}, {"name", holiday.name}, {"start", holiday.start},

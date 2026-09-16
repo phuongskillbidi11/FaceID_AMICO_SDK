@@ -31,6 +31,26 @@ struct SystemInformation {
     NetworkInfo network;
 };
 
+/// Combined read of the device's date/time settings (Date and Time
+/// settings plan, 2026-09-16) -- `time`/`daylightSavingActive` come
+/// from `system_information.fcgi`; the rest from two
+/// `get_configuration.fcgi` calls and `get_ntp_server.fcgi`.
+/// Deliberately a separate type from `SystemInformation` (spec.md
+/// Decision 2) -- device identity vs. date/time settings are
+/// different concerns. Read-only; there is no `DateTimeSettingsUpdate`
+/// counterpart (spec.md Decision 1 -- the write side needs its own
+/// confirm pass first).
+struct DateTimeSettings {
+    int64_t time = 0;
+    bool daylightSavingActive = false;
+    bool ntpEnabled = false;
+    std::string timezone;
+    bool clock12HourFormat = false;
+    bool monthDayYearFormat = false;
+    std::string ntpServer1;
+    std::string ntpServer2;
+};
+
 /// Public user-facing view of the `users` object. Deliberately has no
 /// `password`, `salt`, `panic_password`, or `panic_salt` member.
 /// `hasPassword` is the one exception to "never requested": the SDK

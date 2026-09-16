@@ -264,6 +264,20 @@ backend-liveness signal.
 }
 ```
 
+### `GET /settings/date-time`
+Read-only (Date and Time settings plan, 2026-09-16 -- there is no write
+route). `200` with `AmicoClient::getDateTimeSettings()`'s fields --
+`time`/`daylightSavingActive` come from `system_information.fcgi`, the
+rest from two `get_configuration.fcgi` calls and `get_ntp_server.fcgi`:
+```json
+{
+  "time": 1757980800, "daylightSavingActive": false,
+  "ntpEnabled": true, "timezone": "Asia/Ho_Chi_Minh",
+  "clock12HourFormat": false, "monthDayYearFormat": true,
+  "ntpServer1": "pool.ntp.org", "ntpServer2": "time.google.com"
+}
+```
+
 ### `GET /users?limit=&offset=`
 `200` with a JSON array of user objects (see the User object shape
 below). `limit`/`offset` are optional integers.

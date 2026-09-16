@@ -1,0 +1,32 @@
+plan: 2026-09-16-date-time-settings-read
+risk_level: feature
+planned_at:
+    git_sha: 9d4a7f3060f0caef97e680fab50fac682fd4f431
+state: COMPLETED
+write_scope:
+    - include/amico/Types.hpp
+    - include/amico/Client.hpp
+    - src/Client.cpp
+    - backend/JsonMapping.cpp
+    - backend/JsonMapping.hpp
+    - backend/Routes.cpp
+    - frontend/system-info.js
+    - test/test_system_information.cpp
+    - test/backend/test_routes.cpp
+    - docs/backend-api.md
+    - docs/api-roadmap.md
+    - .plans/2026-09-16-date-time-settings-read/DECISION_LOG.md
+    - .plans/2026-09-16-date-time-settings-read/sprint-summary.md
+retry:
+    build: 0
+    unit_test: 0
+    integration_test: 0
+retry_budget:
+    build: 2
+    unit_test: 2
+    integration_test: 2
+requires_approval: false
+review:
+    verdict: PASS
+verification:
+    verdict: PASS

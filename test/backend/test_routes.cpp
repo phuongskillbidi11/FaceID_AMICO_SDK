@@ -124,6 +124,43 @@ TEST_CASE("GET /system-information maps the confirmed response") {
     CHECK(body.contains("network"));
 }
 
+TEST_CASE("GET /settings/date-time maps the combined date/time settings response") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/system_information.fcgi") {
+            return FakeTransport::ok(readFixture("system_information.json"));
+        }
+        if (req.path == "/get_configuration.fcgi") {
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            if (body.contains("ntp")) {
+                return FakeTransport::ok(nlohmann::json{
+                    {"ntp", {{"enabled", "1"}, {"timezone", "Asia/Ho_Chi_Minh"}}}}.dump());
+            }
+            if (body.contains("general")) {
+                return FakeTransport::ok(nlohmann::json{
+                    {"general", {{"clock_12h_format", "0"}, {"month_day_year_format", "1"}}}}.dump());
+            }
+        }
+        if (req.path == "/get_ntp_server.fcgi") {
+            return FakeTransport::ok(nlohmann::json{{"server1", "pool.ntp.org"}, {"server2", "time.google.com"}}.dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/settings/date-time");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    CHECK(body["ntpEnabled"] == true);
+    CHECK(body["timezone"] == "Asia/Ho_Chi_Minh");
+    CHECK(body["clock12HourFormat"] == false);
+    CHECK(body["monthDayYearFormat"] == true);
+    CHECK(body["ntpServer1"] == "pool.ntp.org");
+    CHECK(body["ntpServer2"] == "time.google.com");
+    CHECK(body.contains("time"));
+    CHECK(body.contains("daylightSavingActive"));
+}
+
 TEST_CASE("GET /users lists users") {
     TestServer server;
     server.fake().responder = [](const HttpRequest& req) {
@@ -1628,7 +1665,7 @@ TEST_CASE("POST /login invalid URL and network failure preserve session") {
 
 TEST_CASE("Every cookie gate rejects unauthorized requests before parsing or SDK calls") {
     const std::vector<std::pair<std::string, std::string>> routes = {
-        {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/users?limit=bad"},
+        {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/users?limit=bad"},
         {"GET", "/users/36"}, {"POST", "/users"}, {"PATCH", "/users/36"}, {"DELETE", "/users/36"},
         {"POST", "/users/36/groups/1"}, {"DELETE", "/users/36/groups/1"},
         {"POST", "/users/36/cards"}, {"DELETE", "/cards/1"}, {"PUT", "/users/36/administrator"},

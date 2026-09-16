@@ -58,6 +58,11 @@ public:
     /// POST /system_information.fcgi.
     SystemInformation getSystemInformation();
 
+    /// Combined read: system_information.fcgi's own time/DST fields
+    /// plus NTP/clock-format/NTP-server settings (Date and Time
+    /// settings plan, 2026-09-16). Read-only (spec.md Decision 1).
+    DateTimeSettings getDateTimeSettings();
+
     /// GET /logout.fcgi. Clears the in-memory session regardless of the
     /// server's response.
     void logout();
@@ -468,6 +473,7 @@ private:
     /// IHttpTransport to pass in.
     friend void setTransportForTesting(AmicoClient& client, std::unique_ptr<IHttpTransport> transport);
 
+    DateTimeSettings getDateTimeSettingsImpl();
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);
     std::optional<AmicoUser> getUserImpl(int64_t id);
     std::map<int64_t, std::pair<std::string, std::string>> getUserNamesByIdsImpl(const std::vector<int64_t>& ids);

@@ -22,6 +22,7 @@ nlohmann::json toJson(const amico::AccessLogEntry& entry,
                       const std::string& userName, const std::string& employeeId,
                       const std::string& portalName, const std::string& timeZoneName);
 nlohmann::json toJson(const amico::SystemInformation& info);
+nlohmann::json toJson(const amico::DateTimeSettings& settings);
 nlohmann::json toJson(const amico::Visit& visit);
 nlohmann::json toJson(const amico::Holiday& holiday);
 nlohmann::json toJson(const amico::ScheduledUnlock& unlock);

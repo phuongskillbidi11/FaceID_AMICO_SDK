@@ -443,7 +443,7 @@ also a strong candidate for the "credential/firmware-adjacent write"
 risk tier (per `feedback_write_api_risk_tiers.md`) requiring
 per-attempt confirmation, same bar as `setPassword`/`setAdministrator`.
 
-## 9. Date and Time (Settings) — 📋 Planned (evidence-backed, read-only for now)
+## 9. Date and Time (Settings) — ✅ read side implemented (2026-09-16), write side still planned
 
 `LIVE_CONFIRMED`:
 ```
@@ -451,13 +451,26 @@ get_configuration.fcgi {"ntp":["enabled","timezone"]}
 get_configuration.fcgi {"general":["clock_12h_format","month_day_year_format"]}
 get_ntp_server.fcgi {}
 ```
+`ntp.enabled`/`general.clock_12h_format`/`general.month_day_year_format`
+are a third device boolean-ish convention (JSON *strings* `"0"`/`"1"`,
+distinct from real JSON booleans and 0/1 JSON integers) — handled by
+the SDK's new `requireStringBoolField()` helper (`src/Client.cpp`).
+`time`/`daylightSavingActive` are read from the already-existing
+`system_information.fcgi` call rather than a new one, so
+`AmicoClient::getDateTimeSettings()` combines 4 underlying requests
+into one `DateTimeSettings` struct.
+
 Write side (`set_system_time`, `set_ntp_server`, `get_ntp_server_status`)
-already `UI_HANDLER_CONFIRMED` (command names known, exact payload
-shape not yet read).
+remains `UI_HANDLER_CONFIRMED` only (command names known, exact payload
+shape not yet read) — deliberately out of scope for this pass
+(`.plans/2026-09-16-date-time-settings-read/spec.md` Decision 1); it
+still needs its own confirm pass before implementing, and likely
+belongs in the same risk tier as License Mode (changes device-wide
+behavior).
 
 | Method | Path | Device call |
 |---|---|---|
-| 📋 | `GET /settings/date-time` | The three `get_*` calls above, combined |
+| ✅ | `GET /settings/date-time` | The three `get_*` calls above, combined with `system_information.fcgi` |
 | 📋 | `PUT /settings/date-time` | `set_system_time`/`set_ntp_server` — payload shape needs one short confirm pass before implementing; likely belongs in the same risk tier as License Mode (changes device-wide behavior) |
 
 ---
