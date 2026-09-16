@@ -276,7 +276,7 @@ holiday supports full edit/remove.
 No protected holiday id — every record supports full edit/remove, in
 both the real device's own UI and this backend/SDK.
 
-## 7. Reports (the other report variants + export) — 📋 Planned (evidence-backed)
+## 7. Reports (the other report variants + export) — 🔍 discovery complete, ready to plan (2026-09-16, expanded scope)
 
 The "Access (Global)" report's own row data (joins + labels +
 pagination) is now implemented directly on `GET /access-logs` (see
@@ -285,23 +285,109 @@ section 3) — it does **not** use `report_generate.fcgi` at all
 text, not a stable JSON list API; the join is done server-side in C++
 instead, mirroring how `AmicoUser` is already enriched).
 
-Still planned: browsing/switching between the device's other report
-*definitions* (Access by Group/by Time/by User, Alarms Global, Users),
-and CSV export/print — both of which genuinely do need
-`report_generate.fcgi`/`object:"reports"`/`object:"report_filters"`
-(the latter two use an unusual nested-object `where` shape, e.g.
-`{"reports":{"id":1}}` — different from every other query in this
-codebase, handle explicitly, don't reuse the existing whitelist
-builder blindly).
+**A supplementary gated read-only discovery pass**
+(`APPROVE_LIVE_DEVICE_TEST:2026-09-16-reports-discovery`, user-approved
+verbatim) found the real scope is much larger, and much more uniformly
+generic, than originally described here: **11 report definitions
+exist** (not 6), and — critically — **every report's export column
+list is itself server-described metadata**, not client-hardcoded per
+report type. This means full export support for all 11 reports is
+achievable with zero per-report-type special-casing.
+
+**All 11 report definitions** (`LIVE_CONFIRMED`, `object:"reports"`,
+plain list, no `where` needed to list all):
+
+| id | name | backing `object` |
+|---|---|---|
+| 1 | Access (Global) | `access_logs` |
+| 2 | Access by User | `access_logs` |
+| 3 | Access by Time | `access_logs` |
+| 4 | Access by Group | `access_logs` |
+| 5 | Users | `users` |
+| 6 | Alarms (Global) | `alarm_logs` **(new object)** |
+| 7 | Calls (Global) | `call_logs` **(new object)** |
+| 8 | Register Status (Global) | `access_logs` |
+| 9 | Register Status by User | `access_logs` |
+| 10 | Register Status by Time | `access_logs` |
+| 11 | Register Status by Group | `access_logs` |
+
+Each row also carries `file_name`, `header` (a `delimiter`-joined
+string of column display labels, used as the CSV file's own header
+line), `delimiter` (`";"`), `line_break` (`"\r\n"`).
+
+**`object:"report_filters"`** (nested-where shape,
+`{"report_filters":{"report_id":<id>}}`) — confirmed for reports 6, 7,
+and 8, generalizing cleanly: each row is `{id, report_id, object,
+field, value, visible, editable}` — a **fully self-describing filter
+widget** (e.g. report 8's filters reference `access_logs.time`,
+`log_types.id`, `users.id`, `portals.id`, `groups.id`,
+`time_zones.id` — a new `log_types` object reference, not yet
+independently schema-read). The `time` filter's `value` is a
+JSON-encoded string default (`{"type":"day","interval":29,"finish":0}`
+— "last 29 days"); other filters default to an empty `value` (no
+filter applied).
+
+**The export column mechanism is fully generic** (newly discovered
+this pass, not previously known) — three more objects:
+- **`object:"report_columns"`** (nested-where by `report_id`): one row
+  per exported column, in order (`sequence`), each with a `type`
+  (device-observed: **always `3` on this device**, meaning
+  "object-field" column; `fixed_report_columns` and
+  `counter_report_columns` — the two other column-type tables implied
+  by the schema — are both empty on this device, so those column
+  types are **not evidenced** and out of scope here).
+- **`object:"object_field_report_columns"`** (plain list, joined to
+  `report_columns` by `report_column_id`): the actual `{object,
+  field}` pair each `type:3` column resolves to. Confirmed for report
+  1 (`access_logs.time/event/identifier_id`,
+  `users.id/name/registration`, `portals.name`, `time_zones.name` —
+  matching the `report_generate.fcgi` capture already on file below)
+  and spot-checked structurally consistent across all 88 rows spanning
+  all 11 reports on this device (including the new `alarm_logs`/
+  `call_logs`/`log_types` objects).
+- **`object:"report_column_formats"`** (plain list, joined by
+  `report_column_id`): CSV text-formatting hints per column
+  (`adjustment`/`width`/`fill`/`format` — e.g. `"%d/%m/%Y %H:%M:%S"`
+  for the date/time column). Useful for byte-exact CSV parity with the
+  device's own native export; **not required** for a clean JSON API,
+  which is this project's own established convention for every prior
+  object (e.g. Holidays/Visits already return raw epoch seconds, not
+  device-formatted strings).
+
+**New object schemas confirmed via `object_metadata.fcgi`:**
+- `alarm_logs`: `id`, `event`, `cause`, `user_id`, `time`,
+  `access_log_id` (FK to `access_logs.id`). Joins: `access_logs` (via
+  `access_log_id`), `users` (via `user_id`).
+- `call_logs`: `id`, `time`, `role`, `remote_uri`, `connection_time`,
+  `dtmf_event`, `p2p_enable`, `call_status`. No joins defined.
+- `log_types` — referenced by report 8's own filters but not yet
+  independently schema-read; likely a small lookup table (id/name),
+  matching every other `*_types`-style object this session
+  (`user_types`, etc.) — 🔍 not yet confirmed, low risk.
+
+**Confirmed `report_generate.fcgi` two-step export flow** (Giai đoạn
+1b pass, 2026-09-12, `docs/ui-action-protocol-map.md`): an id-only
+query (`columns:[{"field":"id","object":"access_logs","type":"object_field"}]`)
+followed by a full-row query with the same `where`/`order` plus the
+full `columns` array (now confirmed to be exactly what
+`object_field_report_columns` describes for that report, in
+`report_columns.sequence` order) — returns `text/plain`
+semicolon-delimited, `\r\n`-terminated rows. Per
+`docs/security-sanitization-policy.md`, only request/response
+**shapes** are recorded here — no real row data (user names, alarm
+causes, call metadata) has been or will be persisted to any tracked
+file.
 
 | Method | Path | Device call |
 |---|---|---|
-| 📋 | `GET /reports` | `load_objects.fcgi` `object:"reports"` — list of report definitions (Access Global/by Group/by Time/by User/Alarms Global/Users) |
-| 📋 | `GET /reports/:id/filters` | `object:"report_filters"`, nested-where shape |
-| 📋 | `GET /reports/:id/export` | Two-step `report_generate.fcgi` (id-query then full-row query), returns `text/plain` semicolon-delimited rows — **never persist real row data to any repo file**, per `docs/security-sanitization-policy.md` |
+| 📋 | `GET /reports` | `load_objects.fcgi` `object:"reports"` — all 11 report definitions |
+| 📋 | `GET /reports/:id/filters` | `object:"report_filters"`, nested-where shape — self-describing filter widgets |
+| 📋 | `GET /reports/:id/export` | Two-step `report_generate.fcgi`, columns resolved generically via `report_columns`/`object_field_report_columns` for any of the 11 reports — **never persist real row data to any repo file** |
 
 **Report designer** (`reportcustomconfig.html`) is a write-shaped
-report-authoring UI — 🔍 discovery pending, not covered by the above.
+report-authoring UI (would let an operator define new
+`reports`/`report_columns`/`report_filters` rows) — 🔍 discovery
+pending, not covered by the above; out of scope for a first pass.
 
 ## 8. License Mode (Settings) — 📋 Planned (evidence-backed, read-only for now)
 
