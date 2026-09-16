@@ -584,6 +584,103 @@ the same convention as `create_objects.fcgi`.
 
 ---
 
+## 10d. Custom Fields (Enroll → Custom Fields) — 🔍 discovery complete, ready to plan (2026-09-16)
+
+**Related to, but structurally distinct from, User Types (section 10c)**:
+both rely on the `custom_tables`/`custom_columns` family of catalog
+objects, but Custom Fields **adds a column to an existing table**
+(`Users`, `Visitors`, or `Visits`) rather than creating a whole new
+table. `LIVE_CONFIRMED` via a gated discovery pass
+(`APPROVE_LIVE_DEVICE_TEST:2026-09-16-custom-fields-discovery` +
+`APPROVE_LIVE_DEVICE_WRITE_TEST:2026-09-16-custom-fields-discovery`,
+both user-approved verbatim).
+
+**The object itself:** the list page shows Table/Type/Name (`custom_columns`
+rows joined with `custom_tables` for the display table name), matching
+the already-known pre-existing "CPF" field on `Users`
+(`custom_columns.id=1`, `custom_table_id=1`, `column_name="cpf"`).
+`Table` accepts exactly 3 options: `Users`, `Visitors`, `Visits`.
+`Type` accepts exactly 2 options: `Text`, `Number`. A `Mandatory`
+checkbox (`not_null`) is also present, not yet independently confirmed
+in a live write (see below).
+
+**⚠️ Process incident during this discovery pass:** a request-shape
+capture attempt (intended to be zero-risk, using a blocklist of known
+write endpoint names copied from every prior discovery this session)
+unintentionally reached the real device, because this object's create
+endpoint has a **previously-undiscovered, differently-named
+endpoint the blocklist didn't anticipate**: `POST /object_add_field.fcgi`
+(singular "field") — not `object_add.fcgi` as with User Types. This
+created a real (test) column on the live `Visits` table before a
+proper write-approval token had been obtained. The mistake was
+reported to the user immediately and transparently; a
+`APPROVE_LIVE_DEVICE_WRITE_TEST` token was then obtained to clean it
+up via the device's own native Remove flow (see below). **Lesson for
+all future discovery passes on novel objects: never assume a blocklist
+of previously-seen endpoint names is complete — each new object may
+introduce its own novel endpoint name.** A denylist-based safe-capture
+approach is fundamentally unsound for first-time discovery of a novel
+object; prefer either (a) obtaining the write-approval token *before*
+any capture attempt on a never-before-seen object, or (b) a strict
+allowlist (only known-safe read endpoints permitted to pass through,
+everything else blocked) rather than a blocklist.
+
+**Confirmed create sequence** (`object_add_field.fcgi`), captured live
+(request only; response not independently captured for this specific
+call, though the create/remove pair's response convention is strongly
+inferred to match `object_add.fcgi`'s own confirmed `{"ids":[...]}`
+shape, given the row that appeared afterward had `custom_columns.id`
+matching the generated suffix):
+```json
+{"object":"c_visits","column_name":"_ZZ_TestField64189",
+ "name":"ZZ_TestField","type":"TEXT","constraint":"NONE","default_value":""}
+```
+`object` here is the **physical table name** (`c_visits`, resolved via
+a `custom_tables` lookup by the target table's `custom_tables.id`
+first — a `load_objects.fcgi` call on `custom_tables` filtered by
+`id`), not the display name. `column_name` follows the same
+`_<sanitized-name><random-suffix>` convention as `object_add.fcgi`'s
+own table-naming. `type` was `"TEXT"` for a Text field (Number was not
+independently captured this pass). `constraint`/`default_value` were
+`"NONE"`/`""` for this non-mandatory field — the `Mandatory` checkbox's
+effect on these fields is not yet independently confirmed.
+
+**Confirmed delete sequence** (mirrors User Types' own lookup +
+symmetric-remove-endpoint pattern, but with its own distinctly-named
+endpoint):
+```
+POST /object_remove_fields.fcgi   {"ids":[8]}   ->   {"ids":[8]}
+```
+(`8` is the `custom_columns.id` of the test field, matching the
+`row_id` attribute shown in the device's own native list table.) This
+is the first live-confirmed response body for this whole
+add/remove-field family — `{"ids":[...]}`, matching the established
+convention.
+
+**Finding: no risk materialized**, same outcome as User Types. After
+delete, directly querying `custom_columns` showed exactly the original
+1 row (the real "CPF" field) — the test field's catalog row was fully
+removed, and cross-checking `GET /visits` on this project's own
+backend afterward confirmed no regression (200, list still loads).
+
+**Not yet independently confirmed:**
+- The `Number` field type's exact `type`/`constraint` values.
+- The `Mandatory` (`not_null`) checkbox's effect on the request shape.
+- Whether `object_remove_fields.fcgi` also drops the underlying
+  physical column (same un-provable-via-this-API caveat as User
+  Types' own physical-table-drop finding) or only the catalog row.
+- Editing an existing custom field (this pass only tested create then
+  delete, same limitation as User Types' own first pass).
+
+**Ready to plan**, following User Types' own established precedent: a
+narrow, purpose-built `CustomFieldsApi` (`list`/`create`/`update`/`remove`)
+that internally orchestrates `object_add_field.fcgi`/
+`object_remove_fields.fcgi`, never exposing a caller-supplied physical
+table/column name — the caller only ever picks one of the 3 known
+table names, one of the 2 known types, a display name, and Mandatory.
+
+---
+
 ## 11. 🔍 Discovery pending — no protocol evidence yet
 
 These sidebar areas exist on the real device but have **not** been
@@ -593,7 +690,6 @@ pass) confirms the real object names/fields/commands.
 
 | Sidebar area | Likely difficulty | Notes |
 |---|---|---|
-| Custom Fields (`customfields.html`) | Low-Medium | |
 | Internal Alarms (`alarmint.html`) | Medium | |
 | Alarm Output (`alarmconfig.html`) | Medium | |
 | Data Tools → Import (`import.html`) | High — likely bulk write, needs care | |
@@ -611,19 +707,17 @@ focused on so far — Users ✅, Visitors ✅, Groups ✅ (read+write+time
 zone linking, 2026-09-16), Time Zones ✅ (read+write, 2026-09-15),
 Visits ✅ implemented 2026-09-14, Holidays ✅ implemented 2026-09-15,
 Scheduled Unlock ✅ implemented 2026-09-15, User Types ✅ implemented
-2026-09-16 — see sections 5/6/6b/6c/10b/10c), the remaining items in
-the real device's own Enroll submenu, in sidebar order:
+2026-09-16, Custom Fields ✅ discovery complete 2026-09-16 — see
+sections 5/6/6b/6c/10b/10c/10d), **every item in Enroll now has at
+least a discovery pass** — the entire sidebar area has been covered.
 
-| Order | Sidebar area | Status |
-|---|---|---|
-| 1 | Custom Fields (`customfields.html`) | 🔍 discovery pending — likely related to the same `custom_tables`/`object_add.fcgi` dynamic-schema mechanism just confirmed for User Types (section 10c) |
-
-**Recommended next single step:** Custom Fields is the next item
-needing a discovery pass — it likely shares much of the same
-`custom_tables`/`object_add.fcgi` underlying mechanism just
-implemented for User Types (section 10c), but with a different shape
-(likely adding columns to an existing table rather than a fixed new
-one).
+**Recommended next single step:** Write the spec/plan for Custom
+Fields (section 10d) — full CRUD reusing the confirmed
+`object_add_field.fcgi`/`object_remove_fields.fcgi` sequence, following
+User Types' own established narrow-API precedent. Outside Enroll,
+Internal Alarms, Alarm Output, and the Settings/Data Tools items in
+this section's own table are the next areas needing a first discovery
+pass.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings
