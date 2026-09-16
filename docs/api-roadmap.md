@@ -468,10 +468,100 @@ up front (same precedent as `DELETE /timezones/:id` not asserting
 |---|---|---|
 | ✅ | `GET /scheduled-unlocks` | `load_objects.fcgi` `object:"scheduled_unlocks"`, plus one `time_zones` cross-object-where read per row to populate `timeZoneIds` |
 | ✅ | `POST /scheduled-unlocks` | `create_objects.fcgi` — `LIVE_CONFIRMED`; never auto-links a time zone (spec.md Decision 1) |
-| ✅ | `PATCH /scheduled-unlocks/:id` | `modify_objects.fcgi` — built by symmetry with the shared `messenger.js` mechanism; **not yet independently live-confirmed for `scheduled_unlocks` specifically** — pending this plan's own Group 7 |
-| ✅ | `DELETE /scheduled-unlocks/:id` | `destroy_objects.fcgi` — same not-yet-confirmed caveat; does not cascade-clean `access_rules`/etc. (spec.md Decision 3) |
+| ✅ | `PATCH /scheduled-unlocks/:id` | `modify_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15, Group 7 |
+| ✅ | `DELETE /scheduled-unlocks/:id` | `destroy_objects.fcgi` — `LIVE_CONFIRMED` 2026-09-15, Group 7; does not cascade-clean `access_rules`/etc. (spec.md Decision 3, confirmed real: an orphaned `access_rules` row was directly observed after this exact delete during Group 7 and cleaned up manually) |
 | ✅ | `POST /scheduled-unlocks/:id/timezones/:timeZoneId` | `create_objects.fcgi` against `access_rules`/`scheduled_unlock_access_rules`/`access_rule_time_zones` as needed — `LIVE_CONFIRMED` sequence; the "does an access_rule already exist" lookup itself is inferred, not captured (spec.md Decision 2, Risks) |
 | ✅ | `DELETE /scheduled-unlocks/:id/timezones/:timeZoneId` | `destroy_objects.fcgi` against `access_rule_time_zones` — `LIVE_CONFIRMED` shape; same lookup caveat |
+
+---
+
+## 10c. User Types (Enroll → User Types) — 🔍 discovery complete, ready to plan (2026-09-16)
+
+**More complex, and more dangerous, than the roadmap originally
+guessed** ("likely a small lookup table"). `LIVE_CONFIRMED` via a full
+gated write/read/delete cycle against the real device
+(`APPROVE_LIVE_DEVICE_TEST:2026-09-16-user-types-gap` +
+`APPROVE_LIVE_DEVICE_WRITE_TEST:2026-09-16-user-types-gap`, both
+user-approved verbatim, after an explicit re-confirmation once the
+risk below was found). One disposable test type ("ZZ_TestUserType")
+was created, inspected, then fully deleted — no lasting device change
+(confirmed by re-querying `custom_tables` afterward, see below).
+
+**The object itself:** `user_types` has only 3 real fields: `id`,
+`custom_table_id` (FK), `require_visitor` (boolean, sent as 0/1 same
+as every other boolean-ish field this session). The device's own
+`usertypes.html` list/form ("User type" name, "Requires Visit"
+checkbox) is a thin UI over a much bigger mechanism:
+
+**Creating a User Type creates a brand-new physical database table on
+the device**, via a previously-undiscovered endpoint,
+`POST /object_add.fcgi`:
+```json
+{"object":"_ZZ_TestUserType72250","name":"ZZ_TestUserType",
+ "fields":[
+   {"column_name":"id","name":"id","type":"INTEGER","constraint":"PRIMARY_KEY"},
+   {"column_name":"user_id","name":"user_id","type":"INTEGER","constraint":"FOREIGN_KEY","foreign_key":{"object":"users","field":"id"}}
+ ]}
+```
+The generated table name is `_<TypeName><5-digit-random-suffix>`. This
+also implicitly creates a row in a `custom_tables` catalog object
+(`id`, `name`, `table_name`) — confirmed via
+`GET /load_objects.fcgi` on `object:"custom_tables"`, which lists every
+custom table on this device (`{"id":1,"name":"Users","table_name":"c_users"}`,
+`{"id":2,"name":"Visits","table_name":"c_visits"}`,
+`{"id":3,"name":"Visitors","table_name":"_visitors"}` — i.e. the CPF
+custom field from the Visitors plan and the Visitors user type itself
+are both implemented via this exact same mechanism). The full create
+sequence: `object_add.fcgi` (creates the table + `custom_tables` row)
+→ `create_objects.fcgi` on `user_types` (`{"custom_table_id":<id>,"require_visitor":0}`)
+→ `modify_objects.fcgi` on `custom_tables` to set the display `name`
+(a separate call after `object_add`, which doesn't appear to persist
+the display name from its own `name` parameter alone).
+
+**The critical risk that was flagged before writing anything:** no
+`object_remove`/`drop_table`/`DROP` string appears anywhere in the
+client-side `class.js`, so it looked like deleting a User Type might
+only remove the `user_types` row while leaving the dynamically-created
+physical table permanently orphaned on the device — a materially
+different, harder-to-reverse risk than every other "orphaned row"
+finding this session (Scheduled Unlock's/Groups' own `access_rules`
+rows are just extra rows in an existing table; this would have been an
+entire un-droppable table). The user was told this explicitly and
+chose to proceed with a live create/delete test anyway.
+
+**Finding: the risk did not materialize.** Deleting the test user type
+fired `POST /object_remove.fcgi` with `{"ids":[4]}` (the
+`custom_tables` row's own id, looked up via a
+`{"object":"user_types","fields":["custom_table_id"],"where":[...]}`
+query first) — a previously-undiscovered endpoint, exactly symmetric
+in name and purpose to `object_add.fcgi`. Re-querying `custom_tables`
+afterward showed exactly the original 3 rows (Users/Visits/Visitors) —
+the test row (id 4) was fully gone from the catalog. This is strong
+evidence (though not directly SQL-schema-inspectable through this
+device's own object-query API) that `object_remove.fcgi` also drops
+the underlying physical table, not just the catalog row — the device's
+own real UI Remove flow is not leaving orphaned tables behind in
+normal use.
+
+**Not yet independently confirmed:** whether `object_remove.fcgi`
+strictly requires the `custom_tables` row to have zero linked `users`
+rows first (i.e. can a User Type with existing enrolled users of that
+type be deleted, and what happens to those users' custom-table data?)
+— not tested, since testing it would require creating real users of
+the test type first, which was out of scope for this narrow discovery
+pass.
+
+**Ready to plan**, with an explicit design question to resolve first:
+whether this SDK should expose `object_add.fcgi`/`object_remove.fcgi`
+as a genuine, general dynamic-schema primitive (matching the device's
+own architecture) or keep the same narrow, purpose-built-only
+philosophy already used throughout this project (a `UserTypesApi`
+that internally orchestrates the 3-call create sequence and the
+lookup-then-`object_remove` delete sequence, without ever exposing a
+caller-supplied table/column definition — mirroring how
+`ScheduledUnlocksApi`/`GroupsApi` hide `access_rules` as pure
+plumbing). The existing project-wide precedent (Decision-by-decision
+across every prior plan this session) strongly favors the latter.
 
 ---
 
@@ -484,7 +574,6 @@ pass) confirms the real object names/fields/commands.
 
 | Sidebar area | Likely difficulty | Notes |
 |---|---|---|
-| User Types (`usertypes.html`) | Low — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) | |
 | Custom Fields (`customfields.html`) | Low-Medium | |
 | Internal Alarms (`alarmint.html`) | Medium | |
 | Alarm Output (`alarmconfig.html`) | Medium | |
@@ -502,18 +591,21 @@ Within **Enroll** specifically (the sidebar area this project has
 focused on so far — Users ✅, Visitors ✅, Groups ✅ (read+write+time
 zone linking, 2026-09-16), Time Zones ✅ (read+write, 2026-09-15),
 Visits ✅ implemented 2026-09-14, Holidays ✅ implemented 2026-09-15,
-Scheduled Unlock ✅ implemented 2026-09-15 — see sections 5/6/6b/6c/10b),
-the remaining items in the real device's own Enroll submenu, in
-sidebar order:
+Scheduled Unlock ✅ implemented 2026-09-15, User Types ✅ discovery
+complete 2026-09-16 — see sections 5/6/6b/6c/10b/10c), the remaining
+items in the real device's own Enroll submenu, in sidebar order:
 
 | Order | Sidebar area | Status |
 |---|---|---|
-| 1 | User Types (`usertypes.html`) | 🔍 discovery pending — likely a small lookup table (`user_type_id` already seen on every `AmicoUser`) |
-| 2 | Custom Fields (`customfields.html`) | 🔍 discovery pending |
+| 1 | Custom Fields (`customfields.html`) | 🔍 discovery pending — likely related to the same `custom_tables`/`object_add.fcgi` dynamic-schema mechanism just confirmed for User Types (section 10c) |
 
-**Recommended next single step:** User Types (row 1) is the next item
-needing a discovery pass — everything else identified so far in
-Enroll is now implemented.
+**Recommended next single step:** Write the spec/plan for User Types
+(section 10c) — full CRUD reusing the confirmed
+`object_add.fcgi`/`object_remove.fcgi` sequence, deciding first whether
+to expose dynamic-schema creation as a general SDK primitive or keep
+it narrowly purpose-built (existing project precedent favors the
+latter). Otherwise, Custom Fields is the next item needing a discovery
+pass, and likely shares much of the same underlying mechanism.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings
