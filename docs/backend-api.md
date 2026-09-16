@@ -278,6 +278,21 @@ rest from two `get_configuration.fcgi` calls and `get_ntp_server.fcgi`:
 }
 ```
 
+### `GET /license`
+Read-only (License Mode settings plan, 2026-09-16 -- there is no write
+route). `200` with `AmicoClient::getLicenseInfo()`'s fields --
+`maxUsers`/`device`/`type` come from `system_information.fcgi`'s own
+`license` object; `catraRoleEnabled` from a separate
+`get_configuration.fcgi` call. `type` and `catraRoleEnabled` are NOT
+confirmed to represent the same setting -- exposed as independent
+fields, never merged (see `include/amico/Types.hpp`'s own
+`LicenseInfo` doc comment):
+```json
+{
+  "maxUsers": 200000, "device": 0, "type": 0, "catraRoleEnabled": false
+}
+```
+
 ### `GET /users?limit=&offset=`
 `200` with a JSON array of user objects (see the User object shape
 below). `limit`/`offset` are optional integers.

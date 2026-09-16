@@ -12,6 +12,12 @@
   tab.append(element("h3", "Date and Time"));
   const dateTimeList = element("dl", undefined, "system-details"); tab.append(dateTimeList);
 
+  // License (License Mode settings plan, 2026-09-16) -- read-only,
+  // same reasoning as the Date and Time panel above (Simplicity
+  // First, no new sidebar section for one small read).
+  tab.append(element("h3", "License"));
+  const licenseList = element("dl", undefined, "system-details"); tab.append(licenseList);
+
   function render(list, value, path) {
     if (value !== null && typeof value === "object" && Object.keys(value).length) {
       Object.entries(value).forEach(([key, child]) => render(list, child, path ? `${path}.${key}` : key));
@@ -28,6 +34,10 @@
     const dateTime = await apiFetch("/settings/date-time");
     dateTimeList.replaceChildren();
     Object.entries(dateTime).forEach(([key, value]) => render(dateTimeList, value, key));
+
+    const license = await apiFetch("/license");
+    licenseList.replaceChildren();
+    Object.entries(license).forEach(([key, value]) => render(licenseList, value, key));
   }
   refresh.addEventListener("click", () => runAction(refresh, load));
   document.addEventListener("tab-activated", event => {

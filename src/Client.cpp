@@ -430,6 +430,23 @@ struct AmicoClient::Impl {
         return settings;
     }
 
+    LicenseInfo getLicenseInfo() {
+        LicenseInfo info;
+
+        nlohmann::json sysInfo = postAuthenticatedJson("/system_information.fcgi", nullptr);
+        nlohmann::json licenseSection = requireField<nlohmann::json>(sysInfo, "license", "/system_information.fcgi");
+        info.maxUsers = requireField<int64_t>(licenseSection, "users", "/system_information.fcgi (license)");
+        info.device = requireField<int64_t>(licenseSection, "device", "/system_information.fcgi (license)");
+        info.type = requireField<int64_t>(licenseSection, "type", "/system_information.fcgi (license)");
+
+        nlohmann::json secBoxBody = {{"sec_box", nlohmann::json::array({"catra_role"})}};
+        nlohmann::json secBoxResponse = postAuthenticatedJson("/get_configuration.fcgi", secBoxBody);
+        nlohmann::json secBoxSection = requireField<nlohmann::json>(secBoxResponse, "sec_box", "/get_configuration.fcgi");
+        info.catraRoleEnabled = requireStringBoolField(secBoxSection, "catra_role", "/get_configuration.fcgi (sec_box)");
+
+        return info;
+    }
+
     void logout() {
         try {
             HttpRequest req = baseRequest("GET", "/logout.fcgi");
@@ -1892,6 +1909,8 @@ bool AmicoClient::isSessionValid() { return impl_->isSessionValid(); }
 SystemInformation AmicoClient::getSystemInformation() { return impl_->getSystemInformation(); }
 DateTimeSettings AmicoClient::getDateTimeSettings() { return getDateTimeSettingsImpl(); }
 DateTimeSettings AmicoClient::getDateTimeSettingsImpl() { return impl_->getDateTimeSettings(); }
+LicenseInfo AmicoClient::getLicenseInfo() { return getLicenseInfoImpl(); }
+LicenseInfo AmicoClient::getLicenseInfoImpl() { return impl_->getLicenseInfo(); }
 void AmicoClient::logout() { impl_->logout(); }
 std::string AmicoClient::debugGetObjectMetadataJson() { return impl_->debugGetObjectMetadataJson(); }
 

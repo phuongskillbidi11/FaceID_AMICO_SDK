@@ -63,6 +63,11 @@ public:
     /// settings plan, 2026-09-16). Read-only (spec.md Decision 1).
     DateTimeSettings getDateTimeSettings();
 
+    /// Combined read: system_information.fcgi's own `license` object
+    /// plus sec_box.catra_role (License Mode settings plan,
+    /// 2026-09-16). Read-only (spec.md Decision 1).
+    LicenseInfo getLicenseInfo();
+
     /// GET /logout.fcgi. Clears the in-memory session regardless of the
     /// server's response.
     void logout();
@@ -474,6 +479,7 @@ private:
     friend void setTransportForTesting(AmicoClient& client, std::unique_ptr<IHttpTransport> transport);
 
     DateTimeSettings getDateTimeSettingsImpl();
+    LicenseInfo getLicenseInfoImpl();
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);
     std::optional<AmicoUser> getUserImpl(int64_t id);
     std::map<int64_t, std::pair<std::string, std::string>> getUserNamesByIdsImpl(const std::vector<int64_t>& ids);

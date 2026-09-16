@@ -138,6 +138,66 @@ TEST_CASE("getDateTimeSettings: string-boolean field with an invalid value raise
     CHECK(threw);
 }
 
+namespace {
+// Shared synthetic (never real-device) fixture wiring for
+// getLicenseInfo() tests: dispatches the 2 underlying calls
+// (system_information.fcgi, get_configuration.fcgi) from a single
+// responder, same convention as respondForDateTimeSettings() above.
+HttpResponse respondForLicenseInfo(const HttpRequest& req, const std::string& catraRole) {
+    if (req.path == "/system_information.fcgi") {
+        return FakeTransport::ok(readFixture("system_information.json"));
+    }
+    if (req.path == "/get_configuration.fcgi") {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (body.contains("sec_box")) {
+            return FakeTransport::ok(nlohmann::json{{"sec_box", {{"catra_role", catraRole}}}}.dump());
+        }
+    }
+    FAIL("unexpected request path: " << req.path);
+    return FakeTransport::ok("{}");
+}
+}  // namespace
+
+TEST_CASE("getLicenseInfo: full flow, all fields mapped correctly") {
+    FakeTransport* fake = nullptr;
+    AmicoClient client = loggedInClient(&fake);
+
+    fake->responder = [](const HttpRequest& req) { return respondForLicenseInfo(req, "1"); };
+
+    LicenseInfo info = client.getLicenseInfo();
+    // system_information.json fixture's own "license" object:
+    // {"users": 200000, "device": 0, "type": 0}.
+    CHECK(info.maxUsers == 200000);
+    CHECK(info.device == 0);
+    CHECK(info.type == 0);
+    CHECK(info.catraRoleEnabled == true);
+}
+
+TEST_CASE("getLicenseInfo: catraRoleEnabled accepts both \"0\" and \"1\"") {
+    for (const std::string value : {std::string("0"), std::string("1")}) {
+        FakeTransport* fake = nullptr;
+        AmicoClient client = loggedInClient(&fake);
+        fake->responder = [&value](const HttpRequest& req) { return respondForLicenseInfo(req, value); };
+
+        CHECK(client.getLicenseInfo().catraRoleEnabled == (value == "1"));
+    }
+}
+
+TEST_CASE("getLicenseInfo: catraRoleEnabled with an invalid value raises ProtocolError") {
+    FakeTransport* fake = nullptr;
+    AmicoClient client = loggedInClient(&fake);
+    fake->responder = [](const HttpRequest& req) { return respondForLicenseInfo(req, "yes"); };
+
+    bool threw = false;
+    try {
+        client.getLicenseInfo();
+    } catch (const ProtocolError& e) {
+        threw = true;
+        CHECK(std::string(e.what()).find("\"0\" or \"1\"") != std::string::npos);
+    }
+    CHECK(threw);
+}
+
 TEST_CASE("scenario 12: missing required field raises ProtocolError with a useful message") {
     FakeTransport* fake = nullptr;
     AmicoClient client = loggedInClient(&fake);

@@ -427,14 +427,28 @@ report-authoring UI (would let an operator define new
 `reports`/`report_columns`/`report_filters` rows) — 🔍 discovery
 pending, not covered by the above; out of scope for a first pass.
 
-## 8. License Mode (Settings) — 📋 Planned (evidence-backed, read-only for now)
+## 8. License Mode (Settings) — ✅ read side implemented (2026-09-16), write side still planned
 
 `LIVE_CONFIRMED`: `POST get_configuration.fcgi {"sec_box":
-["catra_role"]}` → `{"sec_box":{"catra_role":"0"}}`.
+["catra_role"]}` → `{"sec_box":{"catra_role":"0"}}` (the third
+JSON-string boolean convention, same as the Date and Time plan's own
+`ntp.enabled`/etc.). Also `LIVE_CONFIRMED`:
+`system_information.fcgi`'s own `license` object,
+`{"users":200000,"device":0,"type":0}` (captured earlier this session
+while investigating a "why is the Enroll menu missing" question --
+`license.type` is the field behind the device's own
+`Main.isServer()`).
+
+**Important:** `sec_box.catra_role` and `license.type` are two
+independently-confirmed facts, **not confirmed to be the same
+setting** — both currently read `0`/`"0"` on this device, which is not
+evidence they are linked. `GET /license` exposes both verbatim,
+without asserting a relationship
+(`.plans/2026-09-16-license-mode-settings-read/spec.md` Decision 5).
 
 | Method | Path | Device call |
 |---|---|---|
-| 📋 | `GET /license` | `get_configuration.fcgi` `{"sec_box":["catra_role"]}` + existing `system_information.fcgi` license fields |
+| ✅ | `GET /license` | `get_configuration.fcgi` `{"sec_box":["catra_role"]}` + `system_information.fcgi`'s own `license` object |
 
 The write side (upgrading the license tier, password-gated) was
 **deliberately not exercised live** (Cancel only, per the discovery
@@ -442,6 +456,12 @@ pass's own discipline) — 🔍 discovery pending if ever needed; this is
 also a strong candidate for the "credential/firmware-adjacent write"
 risk tier (per `feedback_write_api_risk_tiers.md`) requiring
 per-attempt confirmation, same bar as `setPassword`/`setAdministrator`.
+
+**Not part of this section:** the **Operation Mode** tile
+(`Settings → Operation mode`, online/offline + server IP/port) is a
+distinct setting, found and fixed ad-hoc during this session's Face ID
+troubleshooting (not via a plan) — see the "Settings — other tiles"
+row below; no endpoint exists or is proposed for it yet.
 
 ## 9. Date and Time (Settings) — ✅ read side implemented (2026-09-16), write side still planned
 
@@ -860,7 +880,7 @@ pass) confirms the real object names/fields/commands.
 | Data Tools → Export (`export.html`) | Medium — likely reuses the `export_objects`/backup flow already seen referencing `portal_rules` etc. in the 48-command pass | |
 | Open relay (sidebar direct-action button) | Low — a single immediate device action, no confirmation needed per `feedback_write_api_risk_tiers.md` | |
 | Open Door (sidebar direct-action button) | Low — same as above | |
-| Settings — other tiles (Network, and ~70 more per the "73 tiles" count noted in the Areas/Portals finding) | Varies | Only License Mode and Date and Time have been opened so far |
+| Settings — other tiles (Network, Identification Methods, Facial Settings, and ~68 more per the "73 tiles" count noted in the Areas/Portals finding) | Varies | License Mode ✅ and Date and Time ✅ implemented; Operation Mode fixed ad-hoc (online/offline toggle only, no `GET`/`PUT` endpoint written) -- everything else still unopened |
 
 ---
 

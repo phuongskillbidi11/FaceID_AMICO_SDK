@@ -161,6 +161,33 @@ TEST_CASE("GET /settings/date-time maps the combined date/time settings response
     CHECK(body.contains("daylightSavingActive"));
 }
 
+TEST_CASE("GET /license maps the combined license info response") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/system_information.fcgi") {
+            return FakeTransport::ok(readFixture("system_information.json"));
+        }
+        if (req.path == "/get_configuration.fcgi") {
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            if (body.contains("sec_box")) {
+                return FakeTransport::ok(nlohmann::json{{"sec_box", {{"catra_role", "1"}}}}.dump());
+            }
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/license");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    // system_information.json fixture's own "license" object:
+    // {"users": 200000, "device": 0, "type": 0}.
+    CHECK(body["maxUsers"] == 200000);
+    CHECK(body["device"] == 0);
+    CHECK(body["type"] == 0);
+    CHECK(body["catraRoleEnabled"] == true);
+}
+
 TEST_CASE("GET /users lists users") {
     TestServer server;
     server.fake().responder = [](const HttpRequest& req) {
@@ -1665,7 +1692,7 @@ TEST_CASE("POST /login invalid URL and network failure preserve session") {
 
 TEST_CASE("Every cookie gate rejects unauthorized requests before parsing or SDK calls") {
     const std::vector<std::pair<std::string, std::string>> routes = {
-        {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/users?limit=bad"},
+        {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/license"}, {"GET", "/users?limit=bad"},
         {"GET", "/users/36"}, {"POST", "/users"}, {"PATCH", "/users/36"}, {"DELETE", "/users/36"},
         {"POST", "/users/36/groups/1"}, {"DELETE", "/users/36/groups/1"},
         {"POST", "/users/36/cards"}, {"DELETE", "/cards/1"}, {"PUT", "/users/36/administrator"},

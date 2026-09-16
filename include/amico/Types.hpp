@@ -51,6 +51,27 @@ struct DateTimeSettings {
     std::string ntpServer2;
 };
 
+/// Combined read of the device's license entitlement fields (License
+/// Mode settings plan, 2026-09-16) -- `maxUsers`/`device`/`type` come
+/// from `system_information.fcgi`'s own `license` object;
+/// `catraRoleEnabled` from a separate `get_configuration.fcgi` call.
+/// LIVE_CONFIRMED both are real, but NOT confirmed to represent the
+/// same underlying setting (spec.md Decision 5) -- exposed as
+/// independent fields, never merged into one derived concept.
+/// `device`'s exact meaning is unconfirmed (fixture shows `0`);
+/// exposed verbatim. `type` is the field behind the device's own
+/// front-end `Main.isServer()` check (`type == 1`), which controls
+/// Enroll menu visibility on the native dashboard -- LIVE_CONFIRMED
+/// this session, unrelated to this plan's own scope. Read-only; there
+/// is no `LicenseInfoUpdate` counterpart (spec.md Decision 1 -- the
+/// license upgrade flow is password-gated and was never captured).
+struct LicenseInfo {
+    int64_t maxUsers = 0;
+    int64_t device = 0;
+    int64_t type = 0;
+    bool catraRoleEnabled = false;
+};
+
 /// Public user-facing view of the `users` object. Deliberately has no
 /// `password`, `salt`, `panic_password`, or `panic_salt` member.
 /// `hasPassword` is the one exception to "never requested": the SDK

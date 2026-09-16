@@ -96,6 +96,13 @@ nlohmann::json toJson(const amico::DateTimeSettings& settings) {
     };
 }
 
+nlohmann::json toJson(const amico::LicenseInfo& info) {
+    return {
+        {"maxUsers", info.maxUsers}, {"device", info.device},
+        {"type", info.type}, {"catraRoleEnabled", info.catraRoleEnabled},
+    };
+}
+
 nlohmann::json toJson(const amico::Holiday& holiday) {
     return {
         {"id", holiday.id}, {"name", holiday.name}, {"start", holiday.start},
