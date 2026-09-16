@@ -349,6 +349,35 @@ public:
         AmicoClient* owner_;
     };
 
+    /// Typed read/write wrapper for the `user_types` object (User Types
+    /// write-side plan, 2026-09-16). Hides the dynamic-table plumbing
+    /// (object_add.fcgi/object_remove.fcgi) entirely -- callers only
+    /// ever see a name + a boolean (spec.md Decision 1).
+    class UserTypesApi {
+    public:
+        std::vector<UserType> list();
+
+        /// Creates a new dynamic table (object_add.fcgi), the
+        /// user_types row (create_objects.fcgi), then sets its display
+        /// name (modify_objects.fcgi on custom_tables). Returns the
+        /// device-assigned user_types id.
+        int64_t create(const NewUserType& userType);
+        /// Updates require_visitor (modify_objects.fcgi on user_types)
+        /// and the display name (modify_objects.fcgi on custom_tables).
+        void update(const UserTypeUpdate& userType);
+        /// Looks up the linked custom_table_id, then calls
+        /// object_remove.fcgi to drop the dynamic table. Per spec.md
+        /// Decision 3, does NOT separately call destroy_objects.fcgi on
+        /// user_types unless this plan's own Group 8 live verification
+        /// confirms that's needed.
+        void remove(int64_t id);
+
+    private:
+        friend class AmicoClient;
+        explicit UserTypesApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
     UsersApi& users() { return usersApi_; }
     AccessLogsApi& accessLogs() { return accessLogsApi_; }
     PortalsApi& portals() { return portalsApi_; }
@@ -357,6 +386,7 @@ public:
     VisitsApi& visits() { return visitsApi_; }
     HolidaysApi& holidays() { return holidaysApi_; }
     ScheduledUnlocksApi& scheduledUnlocks() { return scheduledUnlocksApi_; }
+    UserTypesApi& userTypes() { return userTypesApi_; }
 
     /// Development/discovery use only -- returns the raw ~73KB object
     /// schema from POST /object_metadata.fcgi. Not part of the normal
@@ -372,6 +402,7 @@ private:
     friend class VisitsApi;
     friend class HolidaysApi;
     friend class ScheduledUnlocksApi;
+    friend class UserTypesApi;
 
     /// Test-only seam: swaps the internal transport for a fake one so
     /// offline tests never touch a real socket. Declared here (not in a
@@ -430,6 +461,11 @@ private:
     void removeScheduledUnlockImpl(int64_t id);
     void addScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId);
     void removeScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId);
+    std::vector<UserType> listUserTypesImpl();
+    int64_t createUserTypeImpl(const NewUserType& userType);
+    void updateUserTypeImpl(const UserTypeUpdate& userType);
+    void removeUserTypeImpl(int64_t id);
+    int64_t findUserTypeCustomTableIdImpl(int64_t userTypeId);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -442,6 +478,7 @@ private:
     VisitsApi visitsApi_{this};
     HolidaysApi holidaysApi_{this};
     ScheduledUnlocksApi scheduledUnlocksApi_{this};
+    UserTypesApi userTypesApi_{this};
 };
 
 /// See AmicoClient's friend declaration above. Defined in src/Client.cpp;

@@ -217,6 +217,52 @@ nlohmann::json buildAccessRuleTimeZoneLinkBody(int64_t accessRuleId, int64_t tim
 /// LIVE_CONFIRMED verbatim shape.
 nlohmann::json buildAccessRuleTimeZoneUnlinkBody(int64_t accessRuleId, int64_t timeZoneId);
 
+/// Full user_types list, unfiltered/unpaginated. LIVE_CONFIRMED shape
+/// (.plans/2026-09-16-user-types-write-side/spec.md Background).
+nlohmann::json buildUserTypesListBody();
+
+/// Full custom_tables list -- the shared catalog object every
+/// dynamically-created table (user types, custom fields) registers
+/// into. LIVE_CONFIRMED shape (spec.md Decision 2, Background).
+nlohmann::json buildCustomTablesListBody();
+
+/// Looks up the custom_table_id for one user_types row. LIVE_CONFIRMED
+/// verbatim shape (spec.md Background) -- used by update()/remove()
+/// before either can act on the linked custom_tables row.
+nlohmann::json buildUserTypeCustomTableIdBody(int64_t userTypeId);
+
+/// Builds the object_add.fcgi body that creates the dynamic table
+/// backing a new user type. LIVE_CONFIRMED verbatim shape (spec.md
+/// Background) -- always the same fixed 2-column shape (id PK,
+/// user_id FK -> users); tableName/displayName are the only variable
+/// parts.
+nlohmann::json buildUserTypeObjectAddBody(const std::string& tableName, const std::string& displayName);
+
+/// Creates the user_types row itself, linking it to a just-created
+/// custom_table_id. LIVE_CONFIRMED verbatim shape -- bare (no
+/// join/fields/where/order), matching the "bare create_objects" shape
+/// already used for join-table rows like group_access_rules.
+nlohmann::json buildUserTypeCreateBody(int64_t customTableId, bool requireVisitor);
+
+/// Sets the display name on the custom_tables row. LIVE_CONFIRMED
+/// necessary follow-up call (spec.md Background: object_add.fcgi's own
+/// "name" parameter does not alone persist as the display name).
+/// Reused unchanged by both create() and update() (name edit,
+/// inferred by symmetry -- spec.md Risks).
+nlohmann::json buildCustomTableRenameBody(int64_t customTableId, const std::string& name);
+
+/// Updates require_visitor on the user_types row itself. INFERRED by
+/// symmetry with every other object's own modify_objects.fcgi update
+/// shape this session -- not independently captured (spec.md Risks).
+/// Confirm/adjust during this plan's own Group 8.
+nlohmann::json buildUserTypeUpdateBody(int64_t userTypeId, bool requireVisitor);
+
+/// Builds the object_remove.fcgi body that drops the dynamic table.
+/// LIVE_CONFIRMED verbatim shape (spec.md Background): {"ids":[id]},
+/// no "object" field -- unlike destroy_objects.fcgi, this endpoint's
+/// target is implicit (always custom_tables).
+nlohmann::json buildUserTypeObjectRemoveBody(int64_t customTableId);
+
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
 
@@ -441,5 +487,7 @@ extern const std::vector<std::string> kVisitFields;
 extern const std::vector<std::string> kTimeSpanFields;
 extern const std::vector<std::string> kHolidayFields;
 extern const std::vector<std::string> kScheduledUnlockFields;
+extern const std::vector<std::string> kUserTypeFields;
+extern const std::vector<std::string> kCustomTableFields;
 
 }  // namespace amico::detail

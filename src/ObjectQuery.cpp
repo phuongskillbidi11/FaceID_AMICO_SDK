@@ -44,6 +44,14 @@ const std::vector<std::string> kScheduledUnlockFields = {
     "id", "name", "message",
 };
 
+const std::vector<std::string> kUserTypeFields = {
+    "id", "custom_table_id", "require_visitor",
+};
+
+const std::vector<std::string> kCustomTableFields = {
+    "id", "name",
+};
+
 nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
     nlohmann::json body;
     body["join"] = "LEFT";
@@ -498,6 +506,89 @@ nlohmann::json buildAccessRuleTimeZoneUnlinkBody(int64_t accessRuleId, int64_t t
         {{"object", "access_rule_time_zones"}, {"field", "access_rule_id"}, {"value", accessRuleId}},
         {{"object", "access_rule_time_zones"}, {"field", "time_zone_id"}, {"value", nlohmann::json::array({timeZoneId})}},
     });
+    return body;
+}
+
+nlohmann::json buildUserTypesListBody() {
+    nlohmann::json body;
+    body["object"] = "user_types";
+    body["fields"] = kUserTypeFields;
+    return body;
+}
+
+nlohmann::json buildCustomTablesListBody() {
+    nlohmann::json body;
+    body["object"] = "custom_tables";
+    body["fields"] = kCustomTableFields;
+    return body;
+}
+
+nlohmann::json buildUserTypeCustomTableIdBody(int64_t userTypeId) {
+    // Verbatim shape captured live 2026-09-16.
+    nlohmann::json body;
+    body["object"] = "user_types";
+    body["fields"] = nlohmann::json::array({"custom_table_id"});
+    body["where"] = nlohmann::json::array({
+        {{"object", "user_types"}, {"field", "id"}, {"value", nlohmann::json::array({userTypeId})}},
+    });
+    return body;
+}
+
+nlohmann::json buildUserTypeObjectAddBody(const std::string& tableName, const std::string& displayName) {
+    // Verbatim shape captured live 2026-09-16 -- fixed 2-column shape,
+    // matching the device's own only-ever-observed usage of this
+    // endpoint (spec.md Decision 1).
+    nlohmann::json body;
+    body["object"] = tableName;
+    body["name"] = displayName;
+    body["fields"] = nlohmann::json::array({
+        {{"column_name", "id"}, {"name", "id"}, {"type", "INTEGER"}, {"constraint", "PRIMARY_KEY"}},
+        {{"column_name", "user_id"}, {"name", "user_id"}, {"type", "INTEGER"}, {"constraint", "FOREIGN_KEY"},
+         {"foreign_key", {{"object", "users"}, {"field", "id"}}}},
+    });
+    return body;
+}
+
+nlohmann::json buildUserTypeCreateBody(int64_t customTableId, bool requireVisitor) {
+    // Verbatim shape captured live 2026-09-16 -- bare create_objects
+    // shape (no join/fields/where/order), same convention as
+    // group_access_rules/scheduled_unlock_access_rules link rows.
+    nlohmann::json body;
+    body["object"] = "user_types";
+    body["values"] = nlohmann::json::array({
+        {{"custom_table_id", customTableId}, {"require_visitor", boolToDeviceInt(requireVisitor)}},
+    });
+    return body;
+}
+
+nlohmann::json buildCustomTableRenameBody(int64_t customTableId, const std::string& name) {
+    // Verbatim shape captured live 2026-09-16 -- confirmed necessary
+    // follow-up call after object_add.fcgi (spec.md Background).
+    nlohmann::json body;
+    body["object"] = "custom_tables";
+    body["values"] = {{"name", name}};
+    body["where"] = {{"custom_tables", {{"id", customTableId}}}};
+    return body;
+}
+
+nlohmann::json buildUserTypeUpdateBody(int64_t userTypeId, bool requireVisitor) {
+    // NOT independently live-captured -- inferred by symmetry with
+    // every other object's own modify_objects.fcgi update shape this
+    // session (spec.md Risks). Confirm/adjust during this plan's own
+    // Group 8.
+    nlohmann::json body;
+    body["object"] = "user_types";
+    body["values"] = {{"require_visitor", boolToDeviceInt(requireVisitor)}};
+    body["where"] = {{"user_types", {{"id", userTypeId}}}};
+    return body;
+}
+
+nlohmann::json buildUserTypeObjectRemoveBody(int64_t customTableId) {
+    // Verbatim shape captured live 2026-09-16 -- no "object" field;
+    // unlike destroy_objects.fcgi, object_remove.fcgi's target
+    // (custom_tables) is implicit.
+    nlohmann::json body;
+    body["ids"] = nlohmann::json::array({customTableId});
     return body;
 }
 

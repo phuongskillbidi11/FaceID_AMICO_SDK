@@ -1116,10 +1116,100 @@ TEST_CASE("W-6: DELETE /scheduled-unlocks/:id/timezones/:timeZoneId takes both i
     CHECK(res->status == 200);
 }
 
+TEST_CASE("X-1: GET /user-types returns the list joined with custom_tables names") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "user_types") {
+            return FakeTransport::ok(nlohmann::json{{"user_types", nlohmann::json::array({
+                {{"id", 1}, {"custom_table_id", 3}, {"require_visitor", 1}},
+            })}}.dump());
+        }
+        if (req.path == "/load_objects.fcgi" && object == "custom_tables") {
+            return FakeTransport::ok(nlohmann::json{{"custom_tables", nlohmann::json::array({
+                {{"id", 3}, {"name", "Visitors"}},
+            })}}.dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/user-types");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json parsed = nlohmann::json::parse(res->body);
+    REQUIRE(parsed["userTypes"].size() == 1);
+    CHECK(parsed["userTypes"][0]["name"] == "Visitors");
+    CHECK(parsed["userTypes"][0]["requireVisitor"] == true);
+}
+
+TEST_CASE("X-2: POST /user-types creates a user type via object_add -> create_objects -> modify_objects") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/object_add.fcgi") {
+            CHECK(body["name"] == "ZZ_Test");
+            return FakeTransport::ok(R"({"ids":[5]})");
+        }
+        if (req.path == "/create_objects.fcgi") {
+            CHECK(body["values"][0]["custom_table_id"] == 5);
+            return FakeTransport::ok(R"({"ids":[9]})");
+        }
+        if (req.path == "/modify_objects.fcgi") {
+            return FakeTransport::ok(R"({"changes": 1})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/user-types", R"({"name":"ZZ_Test","requireVisitor":false})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 201);
+    CHECK(nlohmann::json::parse(res->body)["id"] == 9);
+}
+
+TEST_CASE("X-3: PATCH /user-types/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "user_types") {
+            return FakeTransport::ok(nlohmann::json{{"user_types", nlohmann::json::array({
+                {{"custom_table_id", 5}},
+            })}}.dump());
+        }
+        return FakeTransport::ok(R"({"changes": 1})");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/user-types/1", R"({"name":"Renamed","requireVisitor":true})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("X-4: DELETE /user-types/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "user_types") {
+            return FakeTransport::ok(nlohmann::json{{"user_types", nlohmann::json::array({
+                {{"custom_table_id", 5}},
+            })}}.dump());
+        }
+        if (req.path == "/object_remove.fcgi") {
+            return FakeTransport::ok(R"({"ids":[5]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Delete("/user-types/7");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);
-    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
+    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/user-types", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
         auto res = cli.Get(path);
         REQUIRE(res != nullptr); CHECK(res->status == 401);
     }

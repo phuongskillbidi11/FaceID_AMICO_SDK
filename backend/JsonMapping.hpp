@@ -25,6 +25,7 @@ nlohmann::json toJson(const amico::SystemInformation& info);
 nlohmann::json toJson(const amico::Visit& visit);
 nlohmann::json toJson(const amico::Holiday& holiday);
 nlohmann::json toJson(const amico::ScheduledUnlock& unlock);
+nlohmann::json toJson(const amico::UserType& userType);
 
 /// Throws nlohmann::json::exception (missing/wrong-typed required
 /// field) or std::invalid_argument/std::out_of_range (numeric parsing)
@@ -59,5 +60,12 @@ amico::HolidayUpdate fromJsonHolidayUpdate(int64_t id, const nlohmann::json& bod
 /// a caller-supplied "timeZoneIds" key is silently ignored.
 amico::NewScheduledUnlock fromJsonNewScheduledUnlock(const nlohmann::json& body);
 amico::ScheduledUnlockUpdate fromJsonScheduledUnlockUpdate(int64_t id, const nlohmann::json& body);
+/// Never parses a "customTableId" key -- amico::NewUserType/
+/// UserTypeUpdate have no such member (the dynamic table is always
+/// internally created/looked up, .plans/2026-09-16-user-types-write-side/
+/// spec.md Decision 1/4); a caller-supplied "customTableId" key is
+/// silently ignored.
+amico::NewUserType fromJsonNewUserType(const nlohmann::json& body);
+amico::UserTypeUpdate fromJsonUserTypeUpdate(int64_t id, const nlohmann::json& body);
 
 }  // namespace amico::backend

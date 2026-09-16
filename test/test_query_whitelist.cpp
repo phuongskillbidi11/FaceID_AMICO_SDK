@@ -420,3 +420,38 @@ TEST_CASE("Q-19 (Groups Time Zones write-side plan, 2026-09-16): no new group/ac
     CHECK(detail::buildGroupAccessRuleCreateBody(1)["object"] == "access_rules");
     CHECK(detail::buildGroupAccessRuleLinkBody(1, 4)["object"] == "group_access_rules");
 }
+
+TEST_CASE("Q-20 (User Types write-side plan, 2026-09-16): no new user_types/custom_tables builder accepts a caller-supplied object/field/table-name string") {
+    // buildUserTypesListBody/buildCustomTablesListBody/
+    // buildUserTypeCustomTableIdBody/buildUserTypeCreateBody/
+    // buildCustomTableRenameBody/buildUserTypeUpdateBody take only
+    // int64_t/bool VALUE parameters -- never a field/object/connector
+    // name. buildUserTypeObjectAddBody/buildUserTypeObjectRemoveBody
+    // do take caller-supplied strings (the dynamic table
+    // name/display name), but those are always generated internally
+    // by UserTypesApi::create() (spec.md Decision 1) -- never passed
+    // through from an external caller (same pattern as Q-9/Q-12/Q-13/
+    // Q-15/Q-17/Q-19 above).
+    CHECK(detail::buildUserTypesListBody()["object"] == "user_types");
+    CHECK(detail::buildCustomTablesListBody()["object"] == "custom_tables");
+    CHECK(detail::buildUserTypeCustomTableIdBody(1)["object"] == "user_types");
+    CHECK(detail::buildUserTypeCreateBody(5, true)["object"] == "user_types");
+    CHECK(detail::buildCustomTableRenameBody(5, "Test")["object"] == "custom_tables");
+    CHECK(detail::buildUserTypeUpdateBody(1, true)["object"] == "user_types");
+    CHECK(detail::buildUserTypeObjectRemoveBody(5)["ids"] == nlohmann::json::array({5}));
+}
+
+TEST_CASE("Q-21: kUserTypeFields/kCustomTableFields never include password/salt/panic_password/panic_salt") {
+    for (const auto& field : detail::kUserTypeFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
+    for (const auto& field : detail::kCustomTableFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
+}

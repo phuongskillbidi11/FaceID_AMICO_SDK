@@ -660,6 +660,45 @@ time zone. Only the specific link row is removed — the backing
 `access_rules`/`scheduled_unlock_access_rules` rows are left intact
 even if this was the last linked time zone.
 
+### `GET /user-types`
+Session required. `200` response:
+```json
+{"userTypes": [{"id": 1, "customTableId": 3, "name": "Visitors",
+  "requireVisitor": true}]}
+```
+An empty list returns `{"userTypes": []}`. `name` is **not** a
+`user_types` column — it is resolved client-side (in the SDK) from the
+linked `custom_tables.name` row, joined by `customTableId`. See
+`docs/api-roadmap.md` section 10c for the full dynamic-table
+mechanism.
+
+### `POST /user-types`
+Body: `{"name": "<name>", "requireVisitor": <bool>}`. `201 {"id": <new
+user type id>}`.
+
+**Creating a user type dynamically creates a real physical database
+table on the device** via `object_add.fcgi` (a fixed 2-column shape:
+`id` primary key, `user_id` foreign key to `users` — never a
+caller-supplied schema), then the `user_types` row itself, then sets
+the display name on the new `custom_tables` row. See
+`docs/api-roadmap.md` section 10c for the full live-captured sequence.
+
+**No `customTableId` in the request body:** a caller-supplied
+`customTableId` key is silently ignored — the dynamic table is always
+internally created, never caller-specified.
+
+### `PATCH /user-types/:id`
+Body: `{"name": "<name>", "requireVisitor": <bool>}`. `200 {"success":
+true}`.
+
+### `DELETE /user-types/:id`
+`200 {"success": true}`. Looks up the linked `custom_table_id`, then
+calls `object_remove.fcgi` to drop the dynamic table (this is
+confirmed to also remove the underlying physical table, not just the
+catalog row — see `docs/api-roadmap.md` section 10c). **Never call
+this against the real "Visitors" user type** in testing — it backs the
+device's entire Visits/Visitors feature.
+
 ### `GET /access-logs?from=&to=&limit=&offset=&userIds=&groupIds=&timeZoneIds=`
 Session required. Optional `userIds`, `groupIds`, and `timeZoneIds` accept
 signed 64-bit integer IDs, comma-separated and/or repeated. For example:

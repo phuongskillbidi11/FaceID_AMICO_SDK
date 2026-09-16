@@ -4,6 +4,7 @@
 #include <cctype>
 #include <ctime>
 #include <map>
+#include <random>
 #include <sstream>
 
 #include <nlohmann/json.hpp>
@@ -74,6 +75,23 @@ bool requireBoolLikeField(const nlohmann::json& j, const char* key, const std::s
     if (it->is_boolean()) return it->get<bool>();
     if (it->is_number_integer()) return it->get<int64_t>() != 0;
     throw ProtocolError(std::string("field '") + key + "' had an unexpected type in response from " + path);
+}
+
+/// Generates a unique-enough dynamic table name for a new user type,
+/// mirroring the device's own `_<sanitized-name><5-digit-suffix>`
+/// convention (User Types write-side plan, 2026-09-16, spec.md
+/// Background) -- purely cosmetic, not device-verified; the device
+/// accepts any legal, non-colliding SQL identifier here. Impure
+/// (random), so it lives here rather than as a pure ObjectQuery
+/// builder.
+std::string generateDynamicTableName(const std::string& displayName) {
+    std::string sanitized;
+    for (char c : displayName) {
+        if (std::isalnum(static_cast<unsigned char>(c))) sanitized += c;
+    }
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<int> dist(10000, 99999);
+    return "_" + sanitized + std::to_string(dist(rng));
 }
 
 }  // namespace
@@ -1123,6 +1141,99 @@ struct AmicoClient::Impl {
         }
     }
 
+    /// LIVE_CONFIRMED shape (spec.md Background) -- looked up before
+    /// update()/remove() can act on a user type's linked custom_tables
+    /// row.
+    int64_t findUserTypeCustomTableId(int64_t userTypeId) {
+        nlohmann::json body = detail::buildUserTypeCustomTableIdBody(userTypeId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("user_types");
+        if (it == response.end() || !it->is_array() || it->empty()) {
+            throw ProtocolError("no user_types row found for id " + std::to_string(userTypeId));
+        }
+        return requireField<int64_t>(it->front(), "custom_table_id", "/load_objects.fcgi (user_types)");
+    }
+
+    std::vector<UserType> listUserTypes() {
+        nlohmann::json utBody = detail::buildUserTypesListBody();
+        nlohmann::json utResponse = postAuthenticatedJson("/load_objects.fcgi", utBody);
+        auto utIt = utResponse.find("user_types");
+        if (utIt == utResponse.end() || !utIt->is_array()) {
+            throw ProtocolError("missing required field 'user_types' in response from /load_objects.fcgi");
+        }
+
+        nlohmann::json ctBody = detail::buildCustomTablesListBody();
+        nlohmann::json ctResponse = postAuthenticatedJson("/load_objects.fcgi", ctBody);
+        auto ctIt = ctResponse.find("custom_tables");
+        if (ctIt == ctResponse.end() || !ctIt->is_array()) {
+            throw ProtocolError("missing required field 'custom_tables' in response from /load_objects.fcgi");
+        }
+        std::map<int64_t, std::string> namesByTableId;
+        for (const auto& row : *ctIt) {
+            namesByTableId[requireField<int64_t>(row, "id", "/load_objects.fcgi (custom_tables)")] =
+                requireField<std::string>(row, "name", "/load_objects.fcgi (custom_tables)");
+        }
+
+        std::vector<UserType> result;
+        result.reserve(utIt->size());
+        for (const auto& row : *utIt) {
+            UserType userType;
+            userType.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (user_types)");
+            userType.customTableId = requireField<int64_t>(row, "custom_table_id", "/load_objects.fcgi (user_types)");
+            userType.requireVisitor = requireBoolLikeField(row, "require_visitor", "/load_objects.fcgi (user_types)");
+            auto nameIt = namesByTableId.find(userType.customTableId);
+            userType.name = nameIt != namesByTableId.end() ? nameIt->second : "";
+            result.push_back(std::move(userType));
+        }
+        return result;
+    }
+
+    int64_t createUserType(const NewUserType& userType) {
+        std::string tableName = generateDynamicTableName(userType.name);
+
+        nlohmann::json addBody = detail::buildUserTypeObjectAddBody(tableName, userType.name);
+        nlohmann::json addResponse = postAuthenticatedJson("/object_add.fcgi", addBody);
+        nlohmann::json addIds = requireField<nlohmann::json>(addResponse, "ids", "/object_add.fcgi");
+        if (!addIds.is_array() || addIds.empty() || !addIds.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /object_add.fcgi");
+        }
+        int64_t customTableId = addIds.front().get<int64_t>();
+
+        nlohmann::json createBody = detail::buildUserTypeCreateBody(customTableId, userType.requireVisitor);
+        nlohmann::json createResponse = postAuthenticatedJson("/create_objects.fcgi", createBody);
+        nlohmann::json createIds = requireField<nlohmann::json>(createResponse, "ids", "/create_objects.fcgi");
+        if (!createIds.is_array() || createIds.empty() || !createIds.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /create_objects.fcgi");
+        }
+        int64_t newId = createIds.front().get<int64_t>();
+
+        postAuthenticatedJson("/modify_objects.fcgi", detail::buildCustomTableRenameBody(customTableId, userType.name));
+
+        return newId;
+    }
+
+    void updateUserType(const UserTypeUpdate& userType) {
+        int64_t customTableId = findUserTypeCustomTableId(userType.id);
+
+        nlohmann::json body = detail::buildUserTypeUpdateBody(userType.id, userType.requireVisitor);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+
+        postAuthenticatedJson("/modify_objects.fcgi", detail::buildCustomTableRenameBody(customTableId, userType.name));
+    }
+
+    /// Per spec.md Decision 3, calls object_remove.fcgi only -- the
+    /// live-captured native Remove flow showed no separate
+    /// destroy_objects.fcgi call against user_types itself. Confirmed
+    /// (or corrected) live during this plan's own Group 8.
+    void removeUserType(int64_t id) {
+        int64_t customTableId = findUserTypeCustomTableId(id);
+        postAuthenticatedJson("/object_remove.fcgi", detail::buildUserTypeObjectRemoveBody(customTableId));
+    }
+
     /// Resolves the 2-hop time-zone join for a batch of access_log ids
     /// (spec.md Decision 2b). Tie-break: the first row encountered at
     /// each hop wins -- deterministic, not arbitrary; matches every row
@@ -1438,6 +1549,11 @@ void AmicoClient::addScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int6
 void AmicoClient::removeScheduledUnlockTimeZoneImpl(int64_t scheduledUnlockId, int64_t timeZoneId) {
     impl_->removeScheduledUnlockTimeZone(scheduledUnlockId, timeZoneId);
 }
+std::vector<UserType> AmicoClient::listUserTypesImpl() { return impl_->listUserTypes(); }
+int64_t AmicoClient::createUserTypeImpl(const NewUserType& userType) { return impl_->createUserType(userType); }
+void AmicoClient::updateUserTypeImpl(const UserTypeUpdate& userType) { impl_->updateUserType(userType); }
+void AmicoClient::removeUserTypeImpl(int64_t id) { impl_->removeUserType(id); }
+int64_t AmicoClient::findUserTypeCustomTableIdImpl(int64_t userTypeId) { return impl_->findUserTypeCustomTableId(userTypeId); }
 
 std::vector<AmicoUser> AmicoClient::UsersApi::list(const UserQuery& query) { return owner_->listUsersImpl(query); }
 std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::UsersApi::getNamesByIds(const std::vector<int64_t>& ids) {
@@ -1497,6 +1613,10 @@ void AmicoClient::ScheduledUnlocksApi::remove(int64_t id) { owner_->removeSchedu
 void AmicoClient::ScheduledUnlocksApi::addTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
     owner_->addScheduledUnlockTimeZoneImpl(scheduledUnlockId, timeZoneId);
 }
+std::vector<UserType> AmicoClient::UserTypesApi::list() { return owner_->listUserTypesImpl(); }
+int64_t AmicoClient::UserTypesApi::create(const NewUserType& userType) { return owner_->createUserTypeImpl(userType); }
+void AmicoClient::UserTypesApi::update(const UserTypeUpdate& userType) { owner_->updateUserTypeImpl(userType); }
+void AmicoClient::UserTypesApi::remove(int64_t id) { owner_->removeUserTypeImpl(id); }
 void AmicoClient::ScheduledUnlocksApi::removeTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
     owner_->removeScheduledUnlockTimeZoneImpl(scheduledUnlockId, timeZoneId);
 }

@@ -102,6 +102,13 @@ nlohmann::json toJson(const amico::ScheduledUnlock& unlock) {
     };
 }
 
+nlohmann::json toJson(const amico::UserType& userType) {
+    return {
+        {"id", userType.id}, {"customTableId", userType.customTableId},
+        {"name", userType.name}, {"requireVisitor", userType.requireVisitor},
+    };
+}
+
 nlohmann::json toJson(const amico::Visit& visit) {
     nlohmann::json j;
     j["id"] = visit.id;
@@ -285,6 +292,29 @@ amico::ScheduledUnlockUpdate fromJsonScheduledUnlockUpdate(int64_t id, const nlo
     amico::ScheduledUnlockUpdate update;
     update.id = id;
     readScheduledUnlockFields(update, body);
+    return update;
+}
+
+namespace {
+// "customTableId" is deliberately never read here -- the dynamic
+// table is always internally created/looked up (spec.md Decision 1/4).
+template <typename T>
+void readUserTypeFields(T& userType, const nlohmann::json& body) {
+    userType.name = body.at("name").get<std::string>();
+    userType.requireVisitor = body.at("requireVisitor").get<bool>();
+}
+}  // namespace
+
+amico::NewUserType fromJsonNewUserType(const nlohmann::json& body) {
+    amico::NewUserType userType;
+    readUserTypeFields(userType, body);
+    return userType;
+}
+
+amico::UserTypeUpdate fromJsonUserTypeUpdate(int64_t id, const nlohmann::json& body) {
+    amico::UserTypeUpdate update;
+    update.id = id;
+    readUserTypeFields(update, body);
     return update;
 }
 

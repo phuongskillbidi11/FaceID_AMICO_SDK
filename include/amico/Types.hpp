@@ -396,6 +396,33 @@ struct ScheduledUnlockUpdate {
     std::string message;
 };
 
+/// Public view of the `user_types` object (User Types write-side
+/// plan, 2026-09-16). `name` is NOT a `user_types` column -- it lives
+/// on the linked `custom_tables` row and is resolved client-side by
+/// UserTypesApi::list() (spec.md Decision 2). `customTableId` is
+/// exposed read-only, informational only -- never caller-settable
+/// (spec.md Decision 4).
+struct UserType {
+    int64_t id = 0;
+    int64_t customTableId = 0;
+    std::string name;
+    bool requireVisitor = false;
+};
+
+/// Creation parameters. Deliberately has no `customTableId` member --
+/// the dynamic table is always internally created (spec.md Decision 1).
+struct NewUserType {
+    std::string name;
+    bool requireVisitor = false;
+};
+
+/// Update parameters. Same no-customTableId rationale as NewUserType.
+struct UserTypeUpdate {
+    int64_t id = 0;
+    std::string name;
+    bool requireVisitor = false;
+};
+
 /// Public view of the `visits` object (Visits plan, 2026-09-14).
 /// `visitorName`/`hostName`/`cardCount` are enrichment fields this SDK
 /// resolves via the already-existing UsersApi::getNamesByIds() and
