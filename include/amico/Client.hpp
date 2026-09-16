@@ -404,6 +404,32 @@ public:
         AmicoClient* owner_;
     };
 
+    /// Typed read/export wrapper for the device's report definitions
+    /// (Reports read+export plan, 2026-09-16). Entirely read-only --
+    /// exportCsv() never mutates device state (spec.md Decision 1).
+    class ReportsApi {
+    public:
+        std::vector<ReportDefinition> list();
+        std::vector<ReportFilter> filters(int64_t reportId);
+
+        /// Exports a report's matching rows as CSV text (header line +
+        /// device rows, `report.delimiter`/`report.lineBreak`
+        /// convention). `filterOverrides` is keyed by ReportFilter::id;
+        /// a missing key uses that filter's own device-default
+        /// `value`. Each override value is parsed as JSON if it
+        /// parses (matching how ReportFilter::value itself is
+        /// sometimes a JSON-object string), else embedded as a literal
+        /// string (spec.md Decision 3). Throws UnsupportedOperationError
+        /// if any resolved export column is not a `type:3`
+        /// ("object-field") column (spec.md Decision 2).
+        std::string exportCsv(int64_t reportId, const std::map<int64_t, std::string>& filterOverrides);
+
+    private:
+        friend class AmicoClient;
+        explicit ReportsApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
     UsersApi& users() { return usersApi_; }
     AccessLogsApi& accessLogs() { return accessLogsApi_; }
     PortalsApi& portals() { return portalsApi_; }
@@ -414,6 +440,7 @@ public:
     ScheduledUnlocksApi& scheduledUnlocks() { return scheduledUnlocksApi_; }
     UserTypesApi& userTypes() { return userTypesApi_; }
     CustomFieldsApi& customFields() { return customFieldsApi_; }
+    ReportsApi& reports() { return reportsApi_; }
 
     /// Development/discovery use only -- returns the raw ~73KB object
     /// schema from POST /object_metadata.fcgi. Not part of the normal
@@ -431,6 +458,7 @@ private:
     friend class ScheduledUnlocksApi;
     friend class UserTypesApi;
     friend class CustomFieldsApi;
+    friend class ReportsApi;
 
     /// Test-only seam: swaps the internal transport for a fake one so
     /// offline tests never touch a real socket. Declared here (not in a
@@ -498,6 +526,9 @@ private:
     int64_t createCustomFieldImpl(const NewCustomField& field);
     void updateCustomFieldImpl(const CustomFieldUpdate& field);
     void removeCustomFieldImpl(int64_t id);
+    std::vector<ReportDefinition> listReportsImpl();
+    std::vector<ReportFilter> listReportFiltersImpl(int64_t reportId);
+    std::string exportReportCsvImpl(int64_t reportId, const std::map<int64_t, std::string>& filterOverrides);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -512,6 +543,7 @@ private:
     ScheduledUnlocksApi scheduledUnlocksApi_{this};
     UserTypesApi userTypesApi_{this};
     CustomFieldsApi customFieldsApi_{this};
+    ReportsApi reportsApi_{this};
 };
 
 /// See AmicoClient's friend declaration above. Defined in src/Client.cpp;

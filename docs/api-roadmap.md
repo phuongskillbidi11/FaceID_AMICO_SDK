@@ -276,7 +276,7 @@ holiday supports full edit/remove.
 No protected holiday id — every record supports full edit/remove, in
 both the real device's own UI and this backend/SDK.
 
-## 7. Reports (the other report variants + export) — 🔍 discovery complete, ready to plan (2026-09-16, expanded scope)
+## 7. Reports (the other report variants + export) — ✅ implemented (2026-09-16, `.plans/2026-09-16-reports-read-export/`)
 
 The "Access (Global)" report's own row data (joins + labels +
 pagination) is now implemented directly on `GET /access-logs` (see
@@ -380,9 +380,47 @@ file.
 
 | Method | Path | Device call |
 |---|---|---|
-| 📋 | `GET /reports` | `load_objects.fcgi` `object:"reports"` — all 11 report definitions |
-| 📋 | `GET /reports/:id/filters` | `object:"report_filters"`, nested-where shape — self-describing filter widgets |
-| 📋 | `GET /reports/:id/export` | Two-step `report_generate.fcgi`, columns resolved generically via `report_columns`/`object_field_report_columns` for any of the 11 reports — **never persist real row data to any repo file** |
+| ✅ | `GET /reports` | `load_objects.fcgi` `object:"reports"` — all 11 report definitions |
+| ✅ | `GET /reports/:id/filters` | `object:"report_filters"`, nested-where shape — self-describing filter widgets |
+| ✅ | `GET /reports/:id/export` (implemented as `POST`, since filter overrides are a JSON body) | Two-step `report_generate.fcgi`, columns resolved generically via `report_columns`/`object_field_report_columns` for any of the 11 reports — **never persist real row data to any repo file** |
+
+**Live verification (Group 8) result — 5 real bugs found and fixed,
+the most bug-dense pass this session, then zero bugs on re-run:**
+- **The `time` filter's `{"type":"day","interval":N,"finish":M}` value
+  is a UI-only descriptor** — embedding it raw in `where` gets `400
+  "Invalid operator: type"`. The genuinely correct shape (found by
+  reading this project's own already-shipped
+  `buildAccessLogsListBody()`, which solves the identical problem for
+  `GET /access-logs`) is `where.<object>.time[">="]`/`["<="]` with
+  computed epoch bounds — the same convention as every other date-
+  range filter in this codebase, not a `report_generate.fcgi`-specific
+  shape as originally assumed from the raw discovery capture below.
+- **`order` is `[field, direction]`** (e.g. `["time","descending"]`),
+  matching `buildAccessLogsListBody()` — **not** `[direction, field]`
+  as originally transcribed from the Giai đoạn 1b capture.
+- **`reports.line_break`/`delimiter` are literal escape-sequence
+  descriptor strings** (`line_break` is the literal 4 characters
+  `\`,`r`,`\`,`n`, confirmed via `charCodeAt()`), not real CR/LF bytes
+  — must be unescaped before use in either the request or any output
+  concatenation.
+- **Some reports' own `object_field_report_columns` already include
+  the primary object's own `id` field** (confirmed for the "Users"
+  report specifically), unlike Access-style reports where `id` is
+  purely an internal join key never present among the report's own
+  columns — the export column list must only prepend an implicit `id`
+  column when the report's own resolved columns don't already have
+  one, or the resulting CSV has a duplicate column.
+- A frontend bug (optional filter inputs incorrectly marked
+  `required`, blocking submission when correctly left empty) was also
+  found and fixed.
+
+The two Risks originally flagged here were both independently
+confirmed correct as inferred: the id-only query's response is indeed
+plain-text, `line_break`-separated ids (not JSON), and multiple
+simultaneous filters on different objects do combine as separate
+top-level keys in the `where` object. See
+`.plans/2026-09-16-reports-read-export/DECISION_LOG.md` for the full
+root-cause narrative of each bug.
 
 **Report designer** (`reportcustomconfig.html`) is a write-shaped
 report-authoring UI (would let an operator define new

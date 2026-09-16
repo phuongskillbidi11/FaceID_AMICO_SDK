@@ -27,6 +27,8 @@ nlohmann::json toJson(const amico::Holiday& holiday);
 nlohmann::json toJson(const amico::ScheduledUnlock& unlock);
 nlohmann::json toJson(const amico::UserType& userType);
 nlohmann::json toJson(const amico::CustomField& field);
+nlohmann::json toJson(const amico::ReportDefinition& report);
+nlohmann::json toJson(const amico::ReportFilter& filter);
 
 /// Throws nlohmann::json::exception (missing/wrong-typed required
 /// field) or std::invalid_argument/std::out_of_range (numeric parsing)

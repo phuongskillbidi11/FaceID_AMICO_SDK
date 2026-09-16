@@ -1513,6 +1513,80 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Reports (2026-09-16-reports-read-export) -- entirely read-only,
+    // no X-Confirm-Sensitive-Action header anywhere in this block
+    // (spec.md Decision 1: report_generate.fcgi never mutates device
+    // state).
+    svr.Get("/reports", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& report : client.reports().list()) rows.push_back(toJson(report));
+            res.set_content(nlohmann::json{{"reports", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Get(R"(/reports/(\d+)/filters)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t reportId = 0;
+        try {
+            reportId = std::stoll(req.matches[1]);
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            auto rows = nlohmann::json::array();
+            for (const auto& filter : client.reports().filters(reportId)) rows.push_back(toJson(filter));
+            res.set_content(nlohmann::json{{"filters", rows}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Post(R"(/reports/(\d+)/export)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        int64_t reportId = 0;
+        std::map<int64_t, std::string> filterOverrides;
+        try {
+            reportId = std::stoll(req.matches[1]);
+            if (!req.body.empty()) {
+                nlohmann::json parsed = nlohmann::json::parse(req.body);
+                if (parsed.contains("filters")) {
+                    for (auto it = parsed["filters"].begin(); it != parsed["filters"].end(); ++it) {
+                        int64_t filterId = std::stoll(it.key());
+                        filterOverrides[filterId] = it.value().get<std::string>();
+                    }
+                }
+            }
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        try {
+            std::string csv = client.reports().exportCsv(reportId, filterOverrides);
+            std::string reportName;
+            for (const auto& report : client.reports().list()) {
+                if (report.id == reportId) {
+                    reportName = report.name;
+                    break;
+                }
+            }
+            res.set_header("Content-Disposition", "attachment; filename=\"" + reportName + ".csv\"");
+            res.set_content(csv, "text/csv");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/access-logs", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

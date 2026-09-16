@@ -116,6 +116,21 @@ nlohmann::json toJson(const amico::CustomField& field) {
     };
 }
 
+nlohmann::json toJson(const amico::ReportDefinition& report) {
+    return {
+        {"id", report.id}, {"name", report.name}, {"object", report.object},
+        {"header", report.header}, {"delimiter", report.delimiter}, {"lineBreak", report.lineBreak},
+    };
+}
+
+nlohmann::json toJson(const amico::ReportFilter& filter) {
+    return {
+        {"id", filter.id}, {"reportId", filter.reportId},
+        {"object", filter.object}, {"field", filter.field}, {"value", filter.value},
+        {"visible", filter.visible}, {"editable", filter.editable},
+    };
+}
+
 nlohmann::json toJson(const amico::Visit& visit) {
     nlohmann::json j;
     j["id"] = visit.id;

@@ -479,3 +479,32 @@ TEST_CASE("Q-23: kCustomColumnFields never includes password/salt/panic_password
         CHECK(field != "panic_salt");
     }
 }
+
+TEST_CASE("Q-24 (Reports read+export plan, 2026-09-16): no new report builder accepts a caller-supplied object/field/connector string") {
+    // buildReportsListBody/buildObjectFieldReportColumnsListBody take
+    // no parameters at all. buildReportFiltersListBody/
+    // buildReportColumnsListBody take only an int64_t VALUE parameter
+    // -- never a field/object/connector name. buildReportGenerateBody
+    // does take caller-supplied where/order/columns json fragments,
+    // but those are always assembled internally by
+    // ReportsApi::exportCsv() from already-validated device metadata
+    // (report_filters/report_columns/object_field_report_columns) --
+    // never passed through from an external caller unvalidated (same
+    // pattern as Q-9/Q-12/Q-13/Q-15/Q-17/Q-19/Q-20/Q-22 above).
+    CHECK(detail::buildReportsListBody()["object"] == "reports");
+    CHECK(detail::buildReportFiltersListBody(1)["object"] == "report_filters");
+    CHECK(detail::buildReportColumnsListBody(1)["object"] == "report_columns");
+    CHECK(detail::buildObjectFieldReportColumnsListBody()["object"] == "object_field_report_columns");
+}
+
+TEST_CASE("Q-25: kReportFields/kReportFilterFields/kReportColumnFields/kObjectFieldReportColumnFields never include password/salt/panic_password/panic_salt") {
+    for (const auto* fields : {&detail::kReportFields, &detail::kReportFilterFields,
+                               &detail::kReportColumnFields, &detail::kObjectFieldReportColumnFields}) {
+        for (const auto& field : *fields) {
+            CHECK(field != "password");
+            CHECK(field != "salt");
+            CHECK(field != "panic_password");
+            CHECK(field != "panic_salt");
+        }
+    }
+}

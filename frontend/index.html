@@ -16,6 +16,7 @@
   <script defer src="user-types.js"></script>
   <script defer src="custom-fields.js"></script>
   <script defer src="access-logs.js"></script>
+  <script defer src="reports.js"></script>
   <script defer src="system-info.js"></script>
   <script defer src="login.js"></script>
 </head>
@@ -70,6 +71,7 @@
         </button>
         <div class="nav-submenu" id="reports-submenu">
           <button type="button" data-tab="access-logs" aria-controls="tab-access-logs" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg><span>Access (Global)</span></button>
+          <button type="button" data-tab="reports" aria-controls="tab-reports" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg><span>Reports</span></button>
         </div>
       </div>
       <button type="button" data-tab="system-info" aria-controls="tab-system-info" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>System Information</span></button>
@@ -85,6 +87,7 @@
       <div id="tab-user-types" hidden><h2>User Types</h2></div>
       <div id="tab-custom-fields" hidden><h2>Custom Fields</h2></div>
       <div id="tab-access-logs" hidden><p class="breadcrumb">Reports › Access (Global)</p><h2>Access (Global)</h2></div>
+      <div id="tab-reports" hidden><p class="breadcrumb">Reports › Reports</p><h2>Reports</h2></div>
       <div id="tab-system-info" hidden><h2>System Information</h2></div>
     </main>
   </div>

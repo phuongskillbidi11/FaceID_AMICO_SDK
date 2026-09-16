@@ -732,6 +732,38 @@ unsupported by this backend. `200 {"success": true}`.
 lookup needed — the id is already the `custom_columns.id`). **Never
 call this against the real "CPF" field** in testing.
 
+### `GET /reports`
+Session required. `200` response:
+```json
+{"reports": [{"id": 1, "name": "Access (Global)", "object": "access_logs",
+  "header": "Date and Time(...);...", "delimiter": ";", "lineBreak": "\r\n"}]}
+```
+All 11 report definitions on this device (Access Global/by User/by
+Time/by Group, Users, Alarms (Global), Calls (Global), Register Status
+Global/by User/by Time/by Group). Entirely read-only — see
+`docs/api-roadmap.md` section 7.
+
+### `GET /reports/:id/filters`
+Session required. `200` response:
+```json
+{"filters": [{"id": 29, "reportId": 1, "object": "access_logs", "field": "time",
+  "value": "{\"type\":\"day\",\"interval\":29,\"finish\":0}", "visible": true, "editable": true}]}
+```
+Self-describing filter widgets for the given report — `value` is the
+device's own current default (empty for id-type filters, a
+JSON-encoded object string for range filters like `time`).
+
+### `POST /reports/:id/export`
+Body: `{"filters": {"<filterId>": "<override value string>", ...}}` —
+any filter id omitted uses that filter's own device-default `value`.
+`200` response: raw CSV text, `Content-Type: text/csv`,
+`Content-Disposition: attachment; filename="<report name>.csv"`.
+Export columns are resolved generically from the report's own
+`report_columns`/`object_field_report_columns` metadata — this works
+identically for all 11 report types, no per-report hardcoding. See
+`docs/api-roadmap.md` section 7 for the full two-step
+`report_generate.fcgi` mechanism this orchestrates.
+
 ### `GET /access-logs?from=&to=&limit=&offset=&userIds=&groupIds=&timeZoneIds=`
 Session required. Optional `userIds`, `groupIds`, and `timeZoneIds` accept
 signed 64-bit integer IDs, comma-separated and/or repeated. For example:

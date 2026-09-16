@@ -110,6 +110,31 @@ std::string generateColumnName(const std::string& displayName) {
     return "_" + sanitized + std::to_string(dist(rng));
 }
 
+/// Unescapes C-style backslash sequences (\r, \n, \t, \\). LIVE_CONFIRMED
+/// during the Reports read+export plan's own Group 8: `reports.line_break`
+/// is device-confirmed to be a literal 4-character descriptor string
+/// ('\', 'r', '\', 'n'), not real control bytes -- the device expects
+/// (and itself returns) real CR/LF bytes on the wire for
+/// report_generate.fcgi's own request/response `line_break`
+/// convention, so this descriptor must be unescaped before use.
+std::string unescapeCStyle(const std::string& value) {
+    std::string result;
+    result.reserve(value.size());
+    for (size_t i = 0; i < value.size(); ++i) {
+        if (value[i] == '\\' && i + 1 < value.size()) {
+            switch (value[i + 1]) {
+                case 'r': result += '\r'; ++i; continue;
+                case 'n': result += '\n'; ++i; continue;
+                case 't': result += '\t'; ++i; continue;
+                case '\\': result += '\\'; ++i; continue;
+                default: break;
+            }
+        }
+        result += value[i];
+    }
+    return result;
+}
+
 }  // namespace
 
 struct AmicoClient::Impl {
@@ -174,6 +199,38 @@ struct AmicoClient::Impl {
             throw HttpError(res.statusCode, "unexpected HTTP status " + std::to_string(res.statusCode) + " from " + path);
         }
         return parseJsonOrThrow(res.body, path);
+    }
+
+    /// Sends an authenticated JSON POST but returns the RAW response
+    /// body as text, not JSON-parsed -- report_generate.fcgi returns
+    /// text/plain, not JSON (Reports read+export plan, 2026-09-16,
+    /// spec.md Background). Mirrors postAuthenticatedJson's
+    /// session/retry/status handling exactly, only differing in the
+    /// final return statement.
+    std::string postAuthenticatedText(const std::string& path, const nlohmann::json& body, bool isRetry = false) {
+        if (!session.isSet()) {
+            throw InvalidSessionError("no active session for " + path + " -- call login() first");
+        }
+        HttpRequest req = baseRequest("POST", path);
+        req.headers.push_back({"Content-Type", "application/json"});
+        req.headers.push_back({"Cookie", session.cookieHeader()});
+        req.body = body.is_null() ? std::string() : body.dump();
+
+        HttpResponse res = transport->send(req);
+
+        if (res.statusCode == 401) {
+            if (!isRetry && config.autoRelogin) {
+                log(LogLevel::Warning, "session rejected (401); attempting one re-login per autoRelogin config");
+                session.clear();
+                login();
+                return postAuthenticatedText(path, body, /*isRetry=*/true);
+            }
+            throw InvalidSessionError("session rejected by device (HTTP 401) for " + path);
+        }
+        if (res.statusCode < 200 || res.statusCode >= 300) {
+            throw HttpError(res.statusCode, "unexpected HTTP status " + std::to_string(res.statusCode) + " from " + path);
+        }
+        return res.body;
     }
 
     /// Sends an authenticated raw-binary POST (Content-Type:
@@ -1347,6 +1404,221 @@ struct AmicoClient::Impl {
         postAuthenticatedJson("/object_remove_fields.fcgi", detail::buildCustomFieldObjectRemoveBody(id));
     }
 
+    std::vector<ReportDefinition> listReports() {
+        nlohmann::json body = detail::buildReportsListBody();
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("reports");
+        if (it == response.end() || !it->is_array()) {
+            throw ProtocolError("missing required field 'reports' in response from /load_objects.fcgi");
+        }
+        std::vector<ReportDefinition> result;
+        result.reserve(it->size());
+        for (const auto& row : *it) {
+            ReportDefinition report;
+            report.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (reports)");
+            report.name = requireField<std::string>(row, "name", "/load_objects.fcgi (reports)");
+            report.object = requireField<std::string>(row, "object", "/load_objects.fcgi (reports)");
+            report.header = requireField<std::string>(row, "header", "/load_objects.fcgi (reports)");
+            report.delimiter = unescapeCStyle(requireField<std::string>(row, "delimiter", "/load_objects.fcgi (reports)"));
+            report.lineBreak = unescapeCStyle(requireField<std::string>(row, "line_break", "/load_objects.fcgi (reports)"));
+            result.push_back(std::move(report));
+        }
+        return result;
+    }
+
+    std::vector<ReportFilter> listReportFilters(int64_t reportId) {
+        nlohmann::json body = detail::buildReportFiltersListBody(reportId);
+        nlohmann::json response = postAuthenticatedJson("/load_objects.fcgi", body);
+        auto it = response.find("report_filters");
+        if (it == response.end() || !it->is_array()) {
+            throw ProtocolError("missing required field 'report_filters' in response from /load_objects.fcgi");
+        }
+        std::vector<ReportFilter> result;
+        result.reserve(it->size());
+        for (const auto& row : *it) {
+            ReportFilter filter;
+            filter.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (report_filters)");
+            filter.reportId = requireField<int64_t>(row, "report_id", "/load_objects.fcgi (report_filters)");
+            filter.object = requireField<std::string>(row, "object", "/load_objects.fcgi (report_filters)");
+            filter.field = requireField<std::string>(row, "field", "/load_objects.fcgi (report_filters)");
+            filter.value = requireField<std::string>(row, "value", "/load_objects.fcgi (report_filters)");
+            filter.visible = requireBoolLikeField(row, "visible", "/load_objects.fcgi (report_filters)");
+            filter.editable = requireBoolLikeField(row, "editable", "/load_objects.fcgi (report_filters)");
+            result.push_back(std::move(filter));
+        }
+        return result;
+    }
+
+    /// Resolves a report's export columns generically via
+    /// report_columns/object_field_report_columns (spec.md
+    /// Decision 2), builds the where clause from device-default +
+    /// caller-overridden filter values (spec.md Decision 3), then
+    /// runs the two-step report_generate.fcgi flow (id-only query,
+    /// then full-row query restricted to the matched ids). Returns
+    /// the assembled CSV text (header line + device rows).
+    std::string exportReportCsv(int64_t reportId, const std::map<int64_t, std::string>& filterOverrides) {
+        std::vector<ReportDefinition> allReports = listReports();
+        auto reportIt = std::find_if(allReports.begin(), allReports.end(),
+                                      [reportId](const ReportDefinition& r) { return r.id == reportId; });
+        if (reportIt == allReports.end()) {
+            throw ProtocolError("no reports row found for id " + std::to_string(reportId));
+        }
+        const ReportDefinition report = *reportIt;
+
+        std::vector<ReportFilter> reportFilters = listReportFilters(reportId);
+        nlohmann::json whereClause = nlohmann::json::object();
+        for (const auto& filter : reportFilters) {
+            std::string effectiveValue = filter.value;
+            auto overrideIt = filterOverrides.find(filter.id);
+            if (overrideIt != filterOverrides.end()) {
+                effectiveValue = overrideIt->second;
+            }
+            if (effectiveValue.empty()) {
+                continue;
+            }
+            // LIVE_CONFIRMED during this plan's own Group 8: a "time"
+            // filter's `{"type":"day","interval":N,"finish":M}` value
+            // is a UI-only descriptor -- the device rejects it embedded
+            // raw (400 "Invalid operator: type"). It must be converted
+            // to the same >=/<= operator-object shape already
+            // confirmed and shipped for GET /access-logs's own
+            // from/to filtering (see buildAccessLogsListBody). "finish"
+            // shifts the window's end that many days before now;
+            // "interval" is the window's own length in days.
+            if (filter.field == "time") {
+                nlohmann::json descriptor;
+                try {
+                    descriptor = nlohmann::json::parse(effectiveValue);
+                } catch (const nlohmann::json::exception&) {
+                    continue;  // not a recognizable time descriptor; skip this filter
+                }
+                int64_t interval = descriptor.value("interval", 0);
+                int64_t finish = descriptor.value("finish", 0);
+                int64_t now = static_cast<int64_t>(std::time(nullptr));
+                int64_t to = now - finish * 86400;
+                int64_t from = to - interval * 86400;
+                whereClause[filter.object][filter.field][">="] = from;
+                whereClause[filter.object][filter.field]["<="] = to;
+                continue;
+            }
+            nlohmann::json parsedValue;
+            try {
+                parsedValue = nlohmann::json::parse(effectiveValue);
+            } catch (const nlohmann::json::exception&) {
+                parsedValue = effectiveValue;
+            }
+            whereClause[filter.object][filter.field] = parsedValue;
+        }
+
+        nlohmann::json rcBody = detail::buildReportColumnsListBody(reportId);
+        nlohmann::json rcResponse = postAuthenticatedJson("/load_objects.fcgi", rcBody);
+        auto rcIt = rcResponse.find("report_columns");
+        if (rcIt == rcResponse.end() || !rcIt->is_array()) {
+            throw ProtocolError("missing required field 'report_columns' in response from /load_objects.fcgi");
+        }
+        std::vector<nlohmann::json> orderedColumns(rcIt->begin(), rcIt->end());
+        std::sort(orderedColumns.begin(), orderedColumns.end(), [](const nlohmann::json& a, const nlohmann::json& b) {
+            return a.at("sequence").get<int64_t>() < b.at("sequence").get<int64_t>();
+        });
+
+        nlohmann::json ofBody = detail::buildObjectFieldReportColumnsListBody();
+        nlohmann::json ofResponse = postAuthenticatedJson("/load_objects.fcgi", ofBody);
+        auto ofIt = ofResponse.find("object_field_report_columns");
+        if (ofIt == ofResponse.end() || !ofIt->is_array()) {
+            throw ProtocolError("missing required field 'object_field_report_columns' in response from /load_objects.fcgi");
+        }
+        std::map<int64_t, std::pair<std::string, std::string>> resolvedByReportColumnId;
+        for (const auto& row : *ofIt) {
+            int64_t reportColumnId = requireField<int64_t>(row, "report_column_id", "/load_objects.fcgi (object_field_report_columns)");
+            std::string object = requireField<std::string>(row, "object", "/load_objects.fcgi (object_field_report_columns)");
+            std::string field = requireField<std::string>(row, "field", "/load_objects.fcgi (object_field_report_columns)");
+            resolvedByReportColumnId[reportColumnId] = {object, field};
+        }
+
+        nlohmann::json resolvedColumns = nlohmann::json::array();
+        bool hasTimeField = false;
+        bool hasOwnIdColumn = false;
+        for (const auto& column : orderedColumns) {
+            int64_t columnType = requireField<int64_t>(column, "type", "/load_objects.fcgi (report_columns)");
+            if (columnType != 3) {
+                throw UnsupportedOperationError("unsupported report_columns.type " + std::to_string(columnType) +
+                                                 " for report " + std::to_string(reportId));
+            }
+            int64_t columnId = requireField<int64_t>(column, "id", "/load_objects.fcgi (report_columns)");
+            auto resolvedIt = resolvedByReportColumnId.find(columnId);
+            if (resolvedIt == resolvedByReportColumnId.end()) {
+                throw ProtocolError("no object_field_report_columns row found for report_column_id " +
+                                     std::to_string(columnId));
+            }
+            resolvedColumns.push_back({{"field", resolvedIt->second.second}, {"object", resolvedIt->second.first}, {"type", "object_field"}});
+            if (resolvedIt->second.first == report.object && resolvedIt->second.second == "time") {
+                hasTimeField = true;
+            }
+            if (resolvedIt->second.first == report.object && resolvedIt->second.second == "id") {
+                hasOwnIdColumn = true;
+            }
+        }
+
+        // LIVE_CONFIRMED during this plan's own Group 8: some reports'
+        // own resolved columns already include the primary object's
+        // own "id" field (e.g. the Users report's "Id (User)" display
+        // column); others never do (e.g. Access reports, where "id" is
+        // only ever used internally for the join, never displayed).
+        // Prepending it unconditionally produced a duplicate id column
+        // (and a header/row-count mismatch) for the former case -- only
+        // prepend when the report's own columns don't already have it.
+        nlohmann::json columns = nlohmann::json::array();
+        if (!hasOwnIdColumn) {
+            columns.push_back({{"field", "id"}, {"object", report.object}, {"type", "object_field"}});
+        }
+        for (const auto& column : resolvedColumns) {
+            columns.push_back(column);
+        }
+
+        // LIVE_CONFIRMED during this plan's own Group 8: order is
+        // [field, direction], matching the already-shipped
+        // buildAccessLogsListBody() convention exactly -- not
+        // [direction, field] as originally inferred from the Giai
+        // đoạn 1b capture.
+        nlohmann::json order = hasTimeField
+            ? nlohmann::json::array({"time", "descending"})
+            : nlohmann::json::array({"id", "ascending"});
+
+        nlohmann::json idColumns = nlohmann::json::array({
+            {{"field", "id"}, {"object", report.object}, {"type", "object_field"}},
+        });
+        nlohmann::json idQueryBody = detail::buildReportGenerateBody(report.object, whereClause, order,
+                                                                       report.delimiter, report.lineBreak, idColumns);
+        std::string idResponseText = postAuthenticatedText("/report_generate.fcgi", idQueryBody);
+
+        std::vector<int64_t> ids;
+        {
+            size_t pos = 0;
+            while (pos < idResponseText.size()) {
+                size_t next = idResponseText.find(report.lineBreak, pos);
+                std::string line = (next == std::string::npos) ? idResponseText.substr(pos)
+                                                                 : idResponseText.substr(pos, next - pos);
+                if (!line.empty()) {
+                    try {
+                        ids.push_back(std::stoll(line));
+                    } catch (const std::exception&) {
+                        // Skip malformed/empty trailing lines.
+                    }
+                }
+                if (next == std::string::npos) break;
+                pos = next + report.lineBreak.size();
+            }
+        }
+
+        nlohmann::json fullWhere = nlohmann::json::object();
+        fullWhere[report.object]["id"] = ids;
+        nlohmann::json rowQueryBody = detail::buildReportGenerateBody(report.object, fullWhere, order,
+                                                                        report.delimiter, report.lineBreak, columns);
+        std::string rowsText = postAuthenticatedText("/report_generate.fcgi", rowQueryBody);
+
+        return report.header + report.lineBreak + rowsText;
+    }
+
     /// Resolves the 2-hop time-zone join for a batch of access_log ids
     /// (spec.md Decision 2b). Tie-break: the first row encountered at
     /// each hop wins -- deterministic, not arbitrary; matches every row
@@ -1671,6 +1943,11 @@ std::vector<CustomField> AmicoClient::listCustomFieldsImpl() { return impl_->lis
 int64_t AmicoClient::createCustomFieldImpl(const NewCustomField& field) { return impl_->createCustomField(field); }
 void AmicoClient::updateCustomFieldImpl(const CustomFieldUpdate& field) { impl_->updateCustomField(field); }
 void AmicoClient::removeCustomFieldImpl(int64_t id) { impl_->removeCustomField(id); }
+std::vector<ReportDefinition> AmicoClient::listReportsImpl() { return impl_->listReports(); }
+std::vector<ReportFilter> AmicoClient::listReportFiltersImpl(int64_t reportId) { return impl_->listReportFilters(reportId); }
+std::string AmicoClient::exportReportCsvImpl(int64_t reportId, const std::map<int64_t, std::string>& filterOverrides) {
+    return impl_->exportReportCsv(reportId, filterOverrides);
+}
 
 std::vector<AmicoUser> AmicoClient::UsersApi::list(const UserQuery& query) { return owner_->listUsersImpl(query); }
 std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::UsersApi::getNamesByIds(const std::vector<int64_t>& ids) {
@@ -1738,6 +2015,11 @@ std::vector<CustomField> AmicoClient::CustomFieldsApi::list() { return owner_->l
 int64_t AmicoClient::CustomFieldsApi::create(const NewCustomField& field) { return owner_->createCustomFieldImpl(field); }
 void AmicoClient::CustomFieldsApi::update(const CustomFieldUpdate& field) { owner_->updateCustomFieldImpl(field); }
 void AmicoClient::CustomFieldsApi::remove(int64_t id) { owner_->removeCustomFieldImpl(id); }
+std::vector<ReportDefinition> AmicoClient::ReportsApi::list() { return owner_->listReportsImpl(); }
+std::vector<ReportFilter> AmicoClient::ReportsApi::filters(int64_t reportId) { return owner_->listReportFiltersImpl(reportId); }
+std::string AmicoClient::ReportsApi::exportCsv(int64_t reportId, const std::map<int64_t, std::string>& filterOverrides) {
+    return owner_->exportReportCsvImpl(reportId, filterOverrides);
+}
 void AmicoClient::ScheduledUnlocksApi::removeTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
     owner_->removeScheduledUnlockTimeZoneImpl(scheduledUnlockId, timeZoneId);
 }

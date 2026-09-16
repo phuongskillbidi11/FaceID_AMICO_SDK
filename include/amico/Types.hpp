@@ -456,6 +456,34 @@ struct CustomFieldUpdate {
     std::string name;
 };
 
+/// Public view of the `reports` object (Reports read+export plan,
+/// 2026-09-16). `object` is the report's backing table
+/// (access_logs/users/alarm_logs/call_logs on this device). `header`
+/// is a `delimiter`-joined string of display column labels -- the
+/// CSV file's own header line.
+struct ReportDefinition {
+    int64_t id = 0;
+    std::string name;
+    std::string object;
+    std::string header;
+    std::string delimiter;
+    std::string lineBreak;
+};
+
+/// Public view of the `report_filters` object -- a self-describing
+/// filter widget. `value` is the device's own default (empty for
+/// id-type filters, a JSON-encoded object string for range filters
+/// like "time"). See ReportsApi::exportCsv() for how overrides work.
+struct ReportFilter {
+    int64_t id = 0;
+    int64_t reportId = 0;
+    std::string object;
+    std::string field;
+    std::string value;
+    bool visible = true;
+    bool editable = true;
+};
+
 /// Public view of the `visits` object (Visits plan, 2026-09-14).
 /// `visitorName`/`hostName`/`cardCount` are enrichment fields this SDK
 /// resolves via the already-existing UsersApi::getNamesByIds() and

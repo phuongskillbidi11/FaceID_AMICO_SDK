@@ -1283,10 +1283,86 @@ TEST_CASE("Y-4: DELETE /custom-fields/:id success returns 200") {
     CHECK(res->status == 200);
 }
 
+TEST_CASE("Z-1: GET /reports returns all report definitions") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) {
+        return FakeTransport::ok(nlohmann::json{{"reports", nlohmann::json::array({
+            {{"id", 1}, {"name", "ZZ_Report"}, {"file_name", ""}, {"object", "access_logs"},
+             {"header", "Time"}, {"delimiter", ";"}, {"line_break", "\r\n"}},
+        })}}.dump());
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/reports");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json parsed = nlohmann::json::parse(res->body);
+    REQUIRE(parsed["reports"].size() == 1);
+    CHECK(parsed["reports"][0]["name"] == "ZZ_Report");
+}
+
+TEST_CASE("Z-2: GET /reports/:id/filters returns a report's filter widgets") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) {
+        return FakeTransport::ok(nlohmann::json{{"report_filters", nlohmann::json::array({
+            {{"id", 29}, {"report_id", 1}, {"object", "access_logs"}, {"field", "time"},
+             {"value", "{\"type\":\"day\",\"interval\":29,\"finish\":0}"}, {"visible", 1}, {"editable", 1}},
+        })}}.dump());
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/reports/1/filters");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json parsed = nlohmann::json::parse(res->body);
+    REQUIRE(parsed["filters"].size() == 1);
+    CHECK(parsed["filters"][0]["field"] == "time");
+}
+
+TEST_CASE("Z-3: POST /reports/:id/export returns CSV with the correct content type and disposition") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/load_objects.fcgi") {
+            const auto object = body.value("object", std::string{});
+            if (object == "reports") {
+                return FakeTransport::ok(nlohmann::json{{"reports", nlohmann::json::array({
+                    {{"id", 1}, {"name", "ZZ_Report"}, {"file_name", ""}, {"object", "access_logs"},
+                     {"header", "Time"}, {"delimiter", ";"}, {"line_break", "\r\n"}},
+                })}}.dump());
+            }
+            if (object == "report_filters") {
+                return FakeTransport::ok(nlohmann::json{{"report_filters", nlohmann::json::array()}}.dump());
+            }
+            if (object == "report_columns") {
+                return FakeTransport::ok(nlohmann::json{{"report_columns", nlohmann::json::array({
+                    {{"id", 100}, {"report_id", 1}, {"type", 3}, {"sequence", 0}},
+                })}}.dump());
+            }
+            if (object == "object_field_report_columns") {
+                return FakeTransport::ok(nlohmann::json{{"object_field_report_columns", nlohmann::json::array({
+                    {{"id", 1}, {"report_column_id", 100}, {"object", "access_logs"}, {"field", "time"}},
+                })}}.dump());
+            }
+        }
+        if (req.path == "/report_generate.fcgi") {
+            bool isRowQuery = body["where"]["access_logs"].contains("id");
+            if (!isRowQuery) return FakeTransport::ok(std::string("1\r\n"));
+            return FakeTransport::ok(std::string("06/09/2026;12:00:00\r\n"));
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Post("/reports/1/export", R"({"filters":{}})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    CHECK(res->get_header_value("Content-Type") == "text/csv");
+    CHECK(res->get_header_value("Content-Disposition") == "attachment; filename=\"ZZ_Report.csv\"");
+    CHECK(res->body == "Time\r\n06/09/2026;12:00:00\r\n");
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);
-    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/user-types", "/custom-fields", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
+    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/user-types", "/custom-fields", "/reports", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
         auto res = cli.Get(path);
         REQUIRE(res != nullptr); CHECK(res->status == 401);
     }

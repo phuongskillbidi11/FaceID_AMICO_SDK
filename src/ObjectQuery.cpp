@@ -56,6 +56,22 @@ const std::vector<std::string> kCustomColumnFields = {
     "id", "custom_table_id", "name", "column_name",
 };
 
+const std::vector<std::string> kReportFields = {
+    "id", "name", "file_name", "object", "header", "delimiter", "line_break",
+};
+
+const std::vector<std::string> kReportFilterFields = {
+    "id", "report_id", "object", "field", "value", "visible", "editable",
+};
+
+const std::vector<std::string> kReportColumnFields = {
+    "id", "report_id", "type", "sequence",
+};
+
+const std::vector<std::string> kObjectFieldReportColumnFields = {
+    "id", "report_column_id", "object", "field",
+};
+
 nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
     nlohmann::json body;
     body["join"] = "LEFT";
@@ -650,6 +666,63 @@ nlohmann::json buildCustomFieldObjectRemoveBody(int64_t customColumnId) {
     // convention as buildUserTypeObjectRemoveBody.
     nlohmann::json body;
     body["ids"] = nlohmann::json::array({customColumnId});
+    return body;
+}
+
+nlohmann::json buildReportsListBody() {
+    nlohmann::json body;
+    body["object"] = "reports";
+    body["fields"] = kReportFields;
+    return body;
+}
+
+nlohmann::json buildReportFiltersListBody(int64_t reportId) {
+    nlohmann::json body;
+    body["object"] = "report_filters";
+    body["fields"] = kReportFilterFields;
+    body["where"] = {{"report_filters", {{"report_id", reportId}}}};
+    return body;
+}
+
+nlohmann::json buildReportColumnsListBody(int64_t reportId) {
+    nlohmann::json body;
+    body["object"] = "report_columns";
+    body["fields"] = kReportColumnFields;
+    body["where"] = {{"report_columns", {{"report_id", reportId}}}};
+    return body;
+}
+
+nlohmann::json buildObjectFieldReportColumnsListBody() {
+    nlohmann::json body;
+    body["object"] = "object_field_report_columns";
+    body["fields"] = kObjectFieldReportColumnFields;
+    return body;
+}
+
+nlohmann::json buildReportGenerateBody(const std::string& reportObject,
+                                        const nlohmann::json& whereClause,
+                                        const nlohmann::json& order,
+                                        const std::string& delimiter,
+                                        const std::string& lineBreak,
+                                        const nlohmann::json& columns) {
+    // Verbatim envelope shape captured live (Giai đoạn 1b, 2026-09-12)
+    // -- used for both the id-only and full-row report_generate.fcgi
+    // steps, differing only in whereClause/columns (spec.md
+    // Background). limit uses a generous cap, not the UI's own
+    // preview-page limit:10 -- exact device-side maximum not
+    // confirmed (spec.md Risks).
+    nlohmann::json body;
+    body["offset"] = 0;
+    body["limit"] = 100000;
+    body["where"] = whereClause;
+    body["order"] = order;
+    body["object"] = reportObject;
+    body["delimiter"] = delimiter;
+    body["line_break"] = lineBreak;
+    body["header"] = "";
+    body["file_name"] = "";
+    body["join"] = "LEFT";
+    body["columns"] = columns;
     return body;
 }
 

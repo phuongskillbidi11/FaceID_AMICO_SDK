@@ -293,6 +293,38 @@ nlohmann::json buildCustomFieldUpdateBody(int64_t customColumnId, const std::str
 /// field -- same convention as buildUserTypeObjectRemoveBody.
 nlohmann::json buildCustomFieldObjectRemoveBody(int64_t customColumnId);
 
+/// Lists all report definitions. LIVE_CONFIRMED plain-list shape (no
+/// `where` needed to list all -- .plans/2026-09-16-reports-read-export/
+/// spec.md Background).
+nlohmann::json buildReportsListBody();
+
+/// Lists a report's filter widgets. LIVE_CONFIRMED nested-where shape
+/// (same convention as `reports` itself, NOT the array-of-clauses
+/// shape used by every other object in this codebase).
+nlohmann::json buildReportFiltersListBody(int64_t reportId);
+
+/// Lists a report's export columns in `sequence` order. LIVE_CONFIRMED
+/// nested-where shape, same convention as buildReportFiltersListBody.
+nlohmann::json buildReportColumnsListBody(int64_t reportId);
+
+/// Lists every object-field column resolution on the device (no
+/// working per-report_id filter confirmed for this object -- fetched
+/// in full, joined client-side by `report_column_id`, spec.md
+/// Background).
+nlohmann::json buildObjectFieldReportColumnsListBody();
+
+/// Builds one report_generate.fcgi request (used for both the
+/// id-only step and the full-row step -- same envelope shape,
+/// differing only in `where`/`columns`). LIVE_CONFIRMED verbatim
+/// envelope shape (spec.md Background); `whereClause`/`order`/
+/// `columns` are caller-supplied per call site.
+nlohmann::json buildReportGenerateBody(const std::string& reportObject,
+                                        const nlohmann::json& whereClause,
+                                        const nlohmann::json& order,
+                                        const std::string& delimiter,
+                                        const std::string& lineBreak,
+                                        const nlohmann::json& columns);
+
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
 
@@ -520,5 +552,9 @@ extern const std::vector<std::string> kScheduledUnlockFields;
 extern const std::vector<std::string> kUserTypeFields;
 extern const std::vector<std::string> kCustomTableFields;
 extern const std::vector<std::string> kCustomColumnFields;
+extern const std::vector<std::string> kReportFields;
+extern const std::vector<std::string> kReportFilterFields;
+extern const std::vector<std::string> kReportColumnFields;
+extern const std::vector<std::string> kObjectFieldReportColumnFields;
 
 }  // namespace amico::detail
