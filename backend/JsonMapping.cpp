@@ -109,6 +109,13 @@ nlohmann::json toJson(const amico::UserType& userType) {
     };
 }
 
+nlohmann::json toJson(const amico::CustomField& field) {
+    return {
+        {"id", field.id}, {"customTableId", field.customTableId},
+        {"table", field.table}, {"name", field.name},
+    };
+}
+
 nlohmann::json toJson(const amico::Visit& visit) {
     nlohmann::json j;
     j["id"] = visit.id;
@@ -315,6 +322,22 @@ amico::UserTypeUpdate fromJsonUserTypeUpdate(int64_t id, const nlohmann::json& b
     amico::UserTypeUpdate update;
     update.id = id;
     readUserTypeFields(update, body);
+    return update;
+}
+
+amico::NewCustomField fromJsonNewCustomField(const nlohmann::json& body) {
+    amico::NewCustomField field;
+    field.table = body.at("table").get<std::string>();
+    field.type = body.at("type").get<std::string>();
+    field.name = body.at("name").get<std::string>();
+    field.mandatory = body.at("mandatory").get<bool>();
+    return field;
+}
+
+amico::CustomFieldUpdate fromJsonCustomFieldUpdate(int64_t id, const nlohmann::json& body) {
+    amico::CustomFieldUpdate update;
+    update.id = id;
+    update.name = body.at("name").get<std::string>();
     return update;
 }
 

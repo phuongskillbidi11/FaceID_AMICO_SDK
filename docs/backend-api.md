@@ -699,6 +699,39 @@ catalog row — see `docs/api-roadmap.md` section 10c). **Never call
 this against the real "Visitors" user type** in testing — it backs the
 device's entire Visits/Visitors feature.
 
+### `GET /custom-fields`
+Session required. `200` response:
+```json
+{"customFields": [{"id": 1, "customTableId": 1, "table": "Users", "name": "CPF"}]}
+```
+An empty list returns `{"customFields": []}`. **No `type`/`mandatory`
+field is returned** — this is a hard device constraint, not an
+omission: `custom_columns` (the backing object) has no such column at
+all (device-confirmed via an explicit `400` error for either field
+name). Both are write-only, set only at creation time. See
+`docs/api-roadmap.md` section 10d.
+
+### `POST /custom-fields`
+Body: `{"table": "Users"|"Visitors"|"Visits", "type": "Text"|"Number",
+"name": "<name>", "mandatory": <bool>}`. `201 {"id": <new custom field
+id>}`. An unrecognized `table` or `type` returns `400` (via
+`UnsupportedOperationError`).
+
+Adds a real column to the physical table backing the chosen display
+table, via `object_add_field.fcgi` (a single call — simpler than User
+Types' own 3-call sequence). See `docs/api-roadmap.md` section 10d for
+the full live-captured sequence.
+
+### `PATCH /custom-fields/:id`
+Body: `{"name": "<name>"}` — **`table`/`type`/`mandatory` cannot be
+changed after creation**, device-confirmed (section 10d), not merely
+unsupported by this backend. `200 {"success": true}`.
+
+### `DELETE /custom-fields/:id`
+`200 {"success": true}`. Calls `object_remove_fields.fcgi` directly (no
+lookup needed — the id is already the `custom_columns.id`). **Never
+call this against the real "CPF" field** in testing.
+
 ### `GET /access-logs?from=&to=&limit=&offset=&userIds=&groupIds=&timeZoneIds=`
 Session required. Optional `userIds`, `groupIds`, and `timeZoneIds` accept
 signed 64-bit integer IDs, comma-separated and/or repeated. For example:

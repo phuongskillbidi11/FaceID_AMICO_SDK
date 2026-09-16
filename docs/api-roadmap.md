@@ -584,7 +584,7 @@ the same convention as `create_objects.fcgi`.
 
 ---
 
-## 10d. Custom Fields (Enroll → Custom Fields) — 🔍 discovery complete, ready to plan (2026-09-16)
+## 10d. Custom Fields (Enroll → Custom Fields) — ✅ implemented (2026-09-16, `.plans/2026-09-16-custom-fields-write-side/`)
 
 **Related to, but structurally distinct from, User Types (section 10c)**:
 both rely on the `custom_tables`/`custom_columns` family of catalog
@@ -672,12 +672,39 @@ backend afterward confirmed no regression (200, list still loads).
 - Editing an existing custom field (this pass only tested create then
   delete, same limitation as User Types' own first pass).
 
-**Ready to plan**, following User Types' own established precedent: a
-narrow, purpose-built `CustomFieldsApi` (`list`/`create`/`update`/`remove`)
-that internally orchestrates `object_add_field.fcgi`/
+**Shipped:** `.plans/2026-09-16-custom-fields-write-side/` implemented
+a narrow, purpose-built `CustomFieldsApi` (`list`/`create`/`update`/
+`remove`) that internally orchestrates `object_add_field.fcgi`/
 `object_remove_fields.fcgi`, never exposing a caller-supplied physical
 table/column name — the caller only ever picks one of the 3 known
 table names, one of the 2 known types, a display name, and Mandatory.
+New routes: `GET/POST/PATCH/DELETE /custom-fields`
+(`docs/backend-api.md`).
+
+A supplementary live read (still under the original discovery pass'
+own `APPROVE_LIVE_DEVICE_TEST` approval, no write involved) confirmed
+`custom_columns` has **exactly 4 real columns** — `id`,
+`custom_table_id`, `name`, `column_name` — and no `type`/`mandatory`/
+`not_null`/`constraint` column at all (device returns an explicit
+`400` for any of those field names). This means `CustomField`'s read
+view cannot expose `type`/`mandatory` (write-only, present only on
+`NewCustomField`), and `table`/`type`/`mandatory` are **provably
+immutable after creation** — not merely assumed.
+
+**Live verification (Group 8) result — 2 real bugs found and fixed,
+then zero bugs on re-run:**
+- The reused `buildCustomTablesListBody()` (from User Types) never
+  requested `table_name`, which `createCustomField()` needs — fixed
+  by adding `"table_name"` to `kCustomTableFields`.
+- The inferred `"Number"` device type string was wrong: it is
+  **`"INTEGER"`**, not `"NUMBER"` — confirmed via the real device's
+  own native Add form. `default_value` is also type-dependent (`""`
+  for Text, `0` for Number). `"NOT_NULL"` for Mandatory was already
+  correct.
+- After both fixes, the full create → edit (rename) → delete cycle
+  succeeded end-to-end on the first attempt, including the inferred
+  rename shape. See `.plans/2026-09-16-custom-fields-write-side/DECISION_LOG.md`
+  for the full record.
 
 ---
 

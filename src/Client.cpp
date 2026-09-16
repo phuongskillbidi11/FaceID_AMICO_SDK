@@ -6,6 +6,7 @@
 #include <map>
 #include <random>
 #include <sstream>
+#include <stdexcept>
 
 #include <nlohmann/json.hpp>
 
@@ -88,6 +89,21 @@ std::string generateDynamicTableName(const std::string& displayName) {
     std::string sanitized;
     for (char c : displayName) {
         if (std::isalnum(static_cast<unsigned char>(c))) sanitized += c;
+    }
+    static std::mt19937 rng{std::random_device{}()};
+    std::uniform_int_distribution<int> dist(10000, 99999);
+    return "_" + sanitized + std::to_string(dist(rng));
+}
+
+/// Generates a unique-enough column name for a new custom field
+/// (Custom Fields write-side plan, 2026-09-16, spec.md Decision 3).
+/// Preserves underscores in the sanitized name -- LIVE_CONFIRMED this
+/// differs from generateDynamicTableName()'s own underscore-stripping
+/// behavior for User Types.
+std::string generateColumnName(const std::string& displayName) {
+    std::string sanitized;
+    for (char c : displayName) {
+        if (std::isalnum(static_cast<unsigned char>(c)) || c == '_') sanitized += c;
     }
     static std::mt19937 rng{std::random_device{}()};
     std::uniform_int_distribution<int> dist(10000, 99999);
@@ -1234,6 +1250,103 @@ struct AmicoClient::Impl {
         postAuthenticatedJson("/object_remove.fcgi", detail::buildUserTypeObjectRemoveBody(customTableId));
     }
 
+    std::vector<CustomField> listCustomFields() {
+        nlohmann::json ccBody = detail::buildCustomColumnsListBody();
+        nlohmann::json ccResponse = postAuthenticatedJson("/load_objects.fcgi", ccBody);
+        auto ccIt = ccResponse.find("custom_columns");
+        if (ccIt == ccResponse.end() || !ccIt->is_array()) {
+            throw ProtocolError("missing required field 'custom_columns' in response from /load_objects.fcgi");
+        }
+
+        nlohmann::json ctBody = detail::buildCustomTablesListBody();
+        nlohmann::json ctResponse = postAuthenticatedJson("/load_objects.fcgi", ctBody);
+        auto ctIt = ctResponse.find("custom_tables");
+        if (ctIt == ctResponse.end() || !ctIt->is_array()) {
+            throw ProtocolError("missing required field 'custom_tables' in response from /load_objects.fcgi");
+        }
+        std::map<int64_t, std::string> tableNamesById;
+        for (const auto& row : *ctIt) {
+            tableNamesById[requireField<int64_t>(row, "id", "/load_objects.fcgi (custom_tables)")] =
+                requireField<std::string>(row, "name", "/load_objects.fcgi (custom_tables)");
+        }
+
+        std::vector<CustomField> result;
+        result.reserve(ccIt->size());
+        for (const auto& row : *ccIt) {
+            CustomField field;
+            field.id = requireField<int64_t>(row, "id", "/load_objects.fcgi (custom_columns)");
+            field.customTableId = requireField<int64_t>(row, "custom_table_id", "/load_objects.fcgi (custom_columns)");
+            field.name = requireField<std::string>(row, "name", "/load_objects.fcgi (custom_columns)");
+            auto tableIt = tableNamesById.find(field.customTableId);
+            field.table = tableIt != tableNamesById.end() ? tableIt->second : "";
+            result.push_back(std::move(field));
+        }
+        return result;
+    }
+
+    /// Validates table/type against their fixed known sets (spec.md
+    /// Decision 4) before ever calling the device. Uses
+    /// UnsupportedOperationError (not std::invalid_argument) so the
+    /// backend's existing exception-to-HTTP-status mapping surfaces
+    /// this as 400 without any special-casing.
+    int64_t createCustomField(const NewCustomField& field) {
+        if (field.table != "Users" && field.table != "Visitors" && field.table != "Visits") {
+            throw UnsupportedOperationError("unrecognized custom field table: " + field.table);
+        }
+        if (field.type != "Text" && field.type != "Number") {
+            throw UnsupportedOperationError("unrecognized custom field type: " + field.type);
+        }
+
+        nlohmann::json ctBody = detail::buildCustomTablesListBody();
+        nlohmann::json ctResponse = postAuthenticatedJson("/load_objects.fcgi", ctBody);
+        auto ctIt = ctResponse.find("custom_tables");
+        if (ctIt == ctResponse.end() || !ctIt->is_array()) {
+            throw ProtocolError("missing required field 'custom_tables' in response from /load_objects.fcgi");
+        }
+        std::string physicalTableName;
+        bool found = false;
+        for (const auto& row : *ctIt) {
+            if (requireField<std::string>(row, "name", "/load_objects.fcgi (custom_tables)") == field.table) {
+                physicalTableName = requireField<std::string>(row, "table_name", "/load_objects.fcgi (custom_tables)");
+                found = true;
+                break;
+            }
+        }
+        if (!found) {
+            throw ProtocolError("no custom_tables row found for table '" + field.table + "'");
+        }
+
+        // LIVE_CONFIRMED during this plan's own Group 8: Number maps to
+        // "INTEGER" (not "NUMBER"), Mandatory maps to "NOT_NULL", and
+        // default_value is type-dependent ("" for Text, 0 -- a JSON
+        // number -- for Number).
+        std::string columnName = generateColumnName(field.name);
+        std::string deviceType = field.type == "Text" ? "TEXT" : "INTEGER";
+        std::string constraint = field.mandatory ? "NOT_NULL" : "NONE";
+        nlohmann::json defaultValue = field.type == "Text" ? nlohmann::json("") : nlohmann::json(0);
+
+        nlohmann::json addBody = detail::buildCustomFieldObjectAddBody(physicalTableName, columnName, field.name, deviceType, constraint, defaultValue);
+        nlohmann::json addResponse = postAuthenticatedJson("/object_add_field.fcgi", addBody);
+        nlohmann::json addIds = requireField<nlohmann::json>(addResponse, "ids", "/object_add_field.fcgi");
+        if (!addIds.is_array() || addIds.empty() || !addIds.front().is_number_integer()) {
+            throw ProtocolError("field 'ids' had an unexpected type or was empty in response from /object_add_field.fcgi");
+        }
+        return addIds.front().get<int64_t>();
+    }
+
+    void updateCustomField(const CustomFieldUpdate& field) {
+        nlohmann::json body = detail::buildCustomFieldUpdateBody(field.id, field.name);
+        nlohmann::json response = postAuthenticatedJson("/modify_objects.fcgi", body);
+        nlohmann::json changes = requireField<nlohmann::json>(response, "changes", "/modify_objects.fcgi");
+        if (!changes.is_number_integer() || changes.get<int64_t>() <= 0) {
+            throw ProtocolError("field 'changes' was not a positive integer in response from /modify_objects.fcgi");
+        }
+    }
+
+    void removeCustomField(int64_t id) {
+        postAuthenticatedJson("/object_remove_fields.fcgi", detail::buildCustomFieldObjectRemoveBody(id));
+    }
+
     /// Resolves the 2-hop time-zone join for a batch of access_log ids
     /// (spec.md Decision 2b). Tie-break: the first row encountered at
     /// each hop wins -- deterministic, not arbitrary; matches every row
@@ -1554,6 +1667,10 @@ int64_t AmicoClient::createUserTypeImpl(const NewUserType& userType) { return im
 void AmicoClient::updateUserTypeImpl(const UserTypeUpdate& userType) { impl_->updateUserType(userType); }
 void AmicoClient::removeUserTypeImpl(int64_t id) { impl_->removeUserType(id); }
 int64_t AmicoClient::findUserTypeCustomTableIdImpl(int64_t userTypeId) { return impl_->findUserTypeCustomTableId(userTypeId); }
+std::vector<CustomField> AmicoClient::listCustomFieldsImpl() { return impl_->listCustomFields(); }
+int64_t AmicoClient::createCustomFieldImpl(const NewCustomField& field) { return impl_->createCustomField(field); }
+void AmicoClient::updateCustomFieldImpl(const CustomFieldUpdate& field) { impl_->updateCustomField(field); }
+void AmicoClient::removeCustomFieldImpl(int64_t id) { impl_->removeCustomField(id); }
 
 std::vector<AmicoUser> AmicoClient::UsersApi::list(const UserQuery& query) { return owner_->listUsersImpl(query); }
 std::map<int64_t, std::pair<std::string, std::string>> AmicoClient::UsersApi::getNamesByIds(const std::vector<int64_t>& ids) {
@@ -1617,6 +1734,10 @@ std::vector<UserType> AmicoClient::UserTypesApi::list() { return owner_->listUse
 int64_t AmicoClient::UserTypesApi::create(const NewUserType& userType) { return owner_->createUserTypeImpl(userType); }
 void AmicoClient::UserTypesApi::update(const UserTypeUpdate& userType) { owner_->updateUserTypeImpl(userType); }
 void AmicoClient::UserTypesApi::remove(int64_t id) { owner_->removeUserTypeImpl(id); }
+std::vector<CustomField> AmicoClient::CustomFieldsApi::list() { return owner_->listCustomFieldsImpl(); }
+int64_t AmicoClient::CustomFieldsApi::create(const NewCustomField& field) { return owner_->createCustomFieldImpl(field); }
+void AmicoClient::CustomFieldsApi::update(const CustomFieldUpdate& field) { owner_->updateCustomFieldImpl(field); }
+void AmicoClient::CustomFieldsApi::remove(int64_t id) { owner_->removeCustomFieldImpl(id); }
 void AmicoClient::ScheduledUnlocksApi::removeTimeZone(int64_t scheduledUnlockId, int64_t timeZoneId) {
     owner_->removeScheduledUnlockTimeZoneImpl(scheduledUnlockId, timeZoneId);
 }

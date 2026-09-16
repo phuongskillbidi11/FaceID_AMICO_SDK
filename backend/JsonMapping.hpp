@@ -26,6 +26,7 @@ nlohmann::json toJson(const amico::Visit& visit);
 nlohmann::json toJson(const amico::Holiday& holiday);
 nlohmann::json toJson(const amico::ScheduledUnlock& unlock);
 nlohmann::json toJson(const amico::UserType& userType);
+nlohmann::json toJson(const amico::CustomField& field);
 
 /// Throws nlohmann::json::exception (missing/wrong-typed required
 /// field) or std::invalid_argument/std::out_of_range (numeric parsing)
@@ -67,5 +68,11 @@ amico::ScheduledUnlockUpdate fromJsonScheduledUnlockUpdate(int64_t id, const nlo
 /// silently ignored.
 amico::NewUserType fromJsonNewUserType(const nlohmann::json& body);
 amico::UserTypeUpdate fromJsonUserTypeUpdate(int64_t id, const nlohmann::json& body);
+/// Never parses "table"/"type"/"mandatory" -- amico::CustomFieldUpdate
+/// has no such members (LIVE_CONFIRMED immutable after creation,
+/// .plans/2026-09-16-custom-fields-write-side/spec.md Decision 2);
+/// caller-supplied keys of those names are silently ignored.
+amico::NewCustomField fromJsonNewCustomField(const nlohmann::json& body);
+amico::CustomFieldUpdate fromJsonCustomFieldUpdate(int64_t id, const nlohmann::json& body);
 
 }  // namespace amico::backend

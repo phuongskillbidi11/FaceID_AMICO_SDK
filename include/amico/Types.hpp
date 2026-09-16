@@ -423,6 +423,39 @@ struct UserTypeUpdate {
     bool requireVisitor = false;
 };
 
+/// Public view of the `custom_columns` object (Custom Fields
+/// write-side plan, 2026-09-16). `table` is resolved from
+/// `custom_table_id` via a join with `custom_tables`, the same
+/// pattern as UserType.name. `type`/`mandatory` are deliberately NOT
+/// exposed here -- LIVE_CONFIRMED that `custom_columns` has no such
+/// column at all (device returns 400 for either field name); they are
+/// write-only, present only on NewCustomField (spec.md Decision 2).
+struct CustomField {
+    int64_t id = 0;
+    int64_t customTableId = 0;
+    std::string table;
+    std::string name;
+};
+
+/// Creation parameters. `table` must be one of "Users"/"Visitors"/
+/// "Visits"; `type` must be one of "Text"/"Number" -- both validated
+/// against these fixed sets before any device call (spec.md
+/// Decision 4).
+struct NewCustomField {
+    std::string table;
+    std::string type;
+    std::string name;
+    bool mandatory = false;
+};
+
+/// Update parameters. Deliberately has no table/type/mandatory member
+/// -- LIVE_CONFIRMED immutable after creation, since custom_columns
+/// has nowhere to store them (spec.md Decision 2).
+struct CustomFieldUpdate {
+    int64_t id = 0;
+    std::string name;
+};
+
 /// Public view of the `visits` object (Visits plan, 2026-09-14).
 /// `visitorName`/`hostName`/`cardCount` are enrichment fields this SDK
 /// resolves via the already-existing UsersApi::getNamesByIds() and

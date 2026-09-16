@@ -263,6 +263,36 @@ nlohmann::json buildUserTypeUpdateBody(int64_t userTypeId, bool requireVisitor);
 /// target is implicit (always custom_tables).
 nlohmann::json buildUserTypeObjectRemoveBody(int64_t customTableId);
 
+/// Lists every real custom field, excluding the auto-created id/
+/// user_id/visit_id PK/FK columns that User Types' own object_add.fcgi
+/// mechanism registers into this same catalog (custom_columns is
+/// shared between both objects). LIVE_CONFIRMED filtered shape
+/// (.plans/2026-09-16-custom-fields-write-side/spec.md Background).
+nlohmann::json buildCustomColumnsListBody();
+
+/// Builds the object_add_field.fcgi body that adds a column to an
+/// existing physical table. LIVE_CONFIRMED verbatim shape for both the
+/// Text/non-mandatory case ("TEXT"/"NONE"/"") and the Number/mandatory
+/// case ("INTEGER"/"NOT_NULL"/0) -- .plans/2026-09-16-custom-fields-write-side/
+/// spec.md Background/Group 8. defaultValue is "" for Text, 0 (a JSON
+/// number, not a string) for Number.
+nlohmann::json buildCustomFieldObjectAddBody(const std::string& physicalTableName,
+                                              const std::string& columnName,
+                                              const std::string& displayName,
+                                              const std::string& deviceType,
+                                              const std::string& constraint,
+                                              const nlohmann::json& defaultValue);
+
+/// Renames a custom field. NOT independently live-captured -- only
+/// `name` is possibly editable at all (spec.md Decision 2). Confirm/
+/// adjust during this plan's own Group 8.
+nlohmann::json buildCustomFieldUpdateBody(int64_t customColumnId, const std::string& name);
+
+/// Builds the object_remove_fields.fcgi body that drops a custom
+/// field. LIVE_CONFIRMED verbatim shape: {"ids":[id]}, no "object"
+/// field -- same convention as buildUserTypeObjectRemoveBody.
+nlohmann::json buildCustomFieldObjectRemoveBody(int64_t customColumnId);
+
 /// Batch user name/registration lookup using the confirmed users.id array filter.
 nlohmann::json buildUsersByIdsBody(const std::vector<int64_t>& ids);
 
@@ -489,5 +519,6 @@ extern const std::vector<std::string> kHolidayFields;
 extern const std::vector<std::string> kScheduledUnlockFields;
 extern const std::vector<std::string> kUserTypeFields;
 extern const std::vector<std::string> kCustomTableFields;
+extern const std::vector<std::string> kCustomColumnFields;
 
 }  // namespace amico::detail

@@ -1206,10 +1206,87 @@ TEST_CASE("X-4: DELETE /user-types/:id success returns 200") {
     CHECK(res->status == 200);
 }
 
+TEST_CASE("Y-1: GET /custom-fields returns the list joined with custom_tables names") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        const auto object = body.value("object", std::string{});
+        if (req.path == "/load_objects.fcgi" && object == "custom_columns") {
+            return FakeTransport::ok(nlohmann::json{{"custom_columns", nlohmann::json::array({
+                {{"id", 1}, {"custom_table_id", 1}, {"name", "CPF"}, {"column_name", "cpf"}},
+            })}}.dump());
+        }
+        if (req.path == "/load_objects.fcgi" && object == "custom_tables") {
+            return FakeTransport::ok(nlohmann::json{{"custom_tables", nlohmann::json::array({
+                {{"id", 1}, {"name", "Users"}},
+            })}}.dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/custom-fields");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json parsed = nlohmann::json::parse(res->body);
+    REQUIRE(parsed["customFields"].size() == 1);
+    CHECK(parsed["customFields"][0]["table"] == "Users");
+    CHECK(parsed["customFields"][0]["name"] == "CPF");
+}
+
+TEST_CASE("Y-2: POST /custom-fields creates a field via object_add_field, and rejects an unrecognized table with 400") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        if (req.path == "/load_objects.fcgi") {
+            return FakeTransport::ok(nlohmann::json{{"custom_tables", nlohmann::json::array({
+                {{"id", 2}, {"name", "Visits"}, {"table_name", "c_visits"}},
+            })}}.dump());
+        }
+        if (req.path == "/object_add_field.fcgi") {
+            CHECK(body["object"] == "c_visits");
+            return FakeTransport::ok(R"({"ids":[9]})");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+
+    auto ok = cli.Post("/custom-fields", R"({"table":"Visits","type":"Text","name":"ZZ_Test","mandatory":false})", "application/json");
+    REQUIRE(ok != nullptr);
+    CHECK(ok->status == 201);
+    CHECK(nlohmann::json::parse(ok->body)["id"] == 9);
+
+    auto bad = cli.Post("/custom-fields", R"({"table":"Groups","type":"Text","name":"ZZ_Test","mandatory":false})", "application/json");
+    REQUIRE(bad != nullptr);
+    CHECK(bad->status == 400);
+}
+
+TEST_CASE("Y-3: PATCH /custom-fields/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) {
+        nlohmann::json body = nlohmann::json::parse(req.body);
+        CHECK(body["object"] == "custom_columns");
+        CHECK(body["values"]["name"] == "Renamed");
+        return FakeTransport::ok(R"({"changes": 1})");
+    };
+    auto cli = server.http();
+    auto res = cli.Patch("/custom-fields/1", R"({"name":"Renamed"})", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("Y-4: DELETE /custom-fields/:id success returns 200") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest&) { return FakeTransport::ok(R"({"ids":[1]})"); };
+    auto cli = server.http();
+    auto res = cli.Delete("/custom-fields/1");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("Report lookup routes require a session before any SDK request") {
     TestServer server(false); server.responder = failIfCalled;
     auto cli = server.http(false);
-    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/user-types", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
+    for (const auto* path : {"/groups", "/timezones", "/holidays", "/scheduled-unlocks", "/user-types", "/custom-fields", "/access-logs?userIds=36&groupIds=1&timeZoneIds=2"}) {
         auto res = cli.Get(path);
         REQUIRE(res != nullptr); CHECK(res->status == 401);
     }

@@ -455,3 +455,27 @@ TEST_CASE("Q-21: kUserTypeFields/kCustomTableFields never include password/salt/
         CHECK(field != "panic_salt");
     }
 }
+
+TEST_CASE("Q-22 (Custom Fields write-side plan, 2026-09-16): no new custom_columns builder accepts a caller-supplied object/field/table-name string") {
+    // buildCustomColumnsListBody takes no parameters at all.
+    // buildCustomFieldUpdateBody takes only int64_t/std::string VALUE
+    // parameters -- never a field/object/connector name.
+    // buildCustomFieldObjectAddBody/buildCustomFieldObjectRemoveBody do
+    // take caller-supplied strings (the physical table/column name),
+    // but those are always generated/looked-up internally by
+    // CustomFieldsApi::create() (spec.md Decision 1/4) -- never passed
+    // through from an external caller unvalidated (same pattern as
+    // Q-9/Q-12/Q-13/Q-15/Q-17/Q-19/Q-20 above).
+    CHECK(detail::buildCustomColumnsListBody()["object"] == "custom_columns");
+    CHECK(detail::buildCustomFieldUpdateBody(1, "Test")["object"] == "custom_columns");
+    CHECK(detail::buildCustomFieldObjectRemoveBody(1)["ids"] == nlohmann::json::array({1}));
+}
+
+TEST_CASE("Q-23: kCustomColumnFields never includes password/salt/panic_password/panic_salt") {
+    for (const auto& field : detail::kCustomColumnFields) {
+        CHECK(field != "password");
+        CHECK(field != "salt");
+        CHECK(field != "panic_password");
+        CHECK(field != "panic_salt");
+    }
+}

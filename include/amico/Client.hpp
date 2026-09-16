@@ -378,6 +378,32 @@ public:
         AmicoClient* owner_;
     };
 
+    /// Typed read/write wrapper for the `custom_columns` object
+    /// (Custom Fields write-side plan, 2026-09-16). Hides the
+    /// object_add_field.fcgi/object_remove_fields.fcgi plumbing
+    /// entirely.
+    class CustomFieldsApi {
+    public:
+        std::vector<CustomField> list();
+
+        /// Validates `table`/`type` against their fixed known sets
+        /// (spec.md Decision 4), resolves the physical table name via
+        /// custom_tables, then calls object_add_field.fcgi. Returns
+        /// the device-assigned custom_columns id. Throws
+        /// std::invalid_argument for an unrecognized table/type.
+        int64_t create(const NewCustomField& field);
+        /// Renames a custom field (modify_objects.fcgi on
+        /// custom_columns). Throws ProtocolError if nothing changed.
+        void update(const CustomFieldUpdate& field);
+        /// Calls object_remove_fields.fcgi to drop the field.
+        void remove(int64_t id);
+
+    private:
+        friend class AmicoClient;
+        explicit CustomFieldsApi(AmicoClient* owner) : owner_(owner) {}
+        AmicoClient* owner_;
+    };
+
     UsersApi& users() { return usersApi_; }
     AccessLogsApi& accessLogs() { return accessLogsApi_; }
     PortalsApi& portals() { return portalsApi_; }
@@ -387,6 +413,7 @@ public:
     HolidaysApi& holidays() { return holidaysApi_; }
     ScheduledUnlocksApi& scheduledUnlocks() { return scheduledUnlocksApi_; }
     UserTypesApi& userTypes() { return userTypesApi_; }
+    CustomFieldsApi& customFields() { return customFieldsApi_; }
 
     /// Development/discovery use only -- returns the raw ~73KB object
     /// schema from POST /object_metadata.fcgi. Not part of the normal
@@ -403,6 +430,7 @@ private:
     friend class HolidaysApi;
     friend class ScheduledUnlocksApi;
     friend class UserTypesApi;
+    friend class CustomFieldsApi;
 
     /// Test-only seam: swaps the internal transport for a fake one so
     /// offline tests never touch a real socket. Declared here (not in a
@@ -466,6 +494,10 @@ private:
     void updateUserTypeImpl(const UserTypeUpdate& userType);
     void removeUserTypeImpl(int64_t id);
     int64_t findUserTypeCustomTableIdImpl(int64_t userTypeId);
+    std::vector<CustomField> listCustomFieldsImpl();
+    int64_t createCustomFieldImpl(const NewCustomField& field);
+    void updateCustomFieldImpl(const CustomFieldUpdate& field);
+    void removeCustomFieldImpl(int64_t id);
 
     struct Impl;
     std::unique_ptr<Impl> impl_;
@@ -479,6 +511,7 @@ private:
     HolidaysApi holidaysApi_{this};
     ScheduledUnlocksApi scheduledUnlocksApi_{this};
     UserTypesApi userTypesApi_{this};
+    CustomFieldsApi customFieldsApi_{this};
 };
 
 /// See AmicoClient's friend declaration above. Defined in src/Client.cpp;

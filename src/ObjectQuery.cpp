@@ -49,7 +49,11 @@ const std::vector<std::string> kUserTypeFields = {
 };
 
 const std::vector<std::string> kCustomTableFields = {
-    "id", "name",
+    "id", "name", "table_name",
+};
+
+const std::vector<std::string> kCustomColumnFields = {
+    "id", "custom_table_id", "name", "column_name",
 };
 
 nlohmann::json buildUsersListBody(int limit, int offset, std::optional<int64_t> userTypeId) {
@@ -589,6 +593,63 @@ nlohmann::json buildUserTypeObjectRemoveBody(int64_t customTableId) {
     // (custom_tables) is implicit.
     nlohmann::json body;
     body["ids"] = nlohmann::json::array({customTableId});
+    return body;
+}
+
+nlohmann::json buildCustomColumnsListBody() {
+    // Verbatim filtered shape captured live 2026-09-16 -- excludes the
+    // auto-created id/user_id/visit_id PK/FK columns that User Types'
+    // own object_add.fcgi mechanism registers into this same catalog.
+    nlohmann::json body;
+    body["join"] = "LEFT";
+    body["object"] = "custom_columns";
+    body["fields"] = kCustomColumnFields;
+    body["where"] = nlohmann::json::array({
+        {{"object", "custom_columns"}, {"field", "column_name"}, {"value", "id"}, {"operator", "!="}, {"connector", "AND"}},
+        {{"object", "custom_columns"}, {"field", "column_name"}, {"value", "user_id"}, {"operator", "!="}, {"connector", ") AND ("}},
+        {{"object", "custom_columns"}, {"field", "column_name"}, {"value", "visit_id"}, {"operator", "!="}, {"connector", ") AND ("}},
+    });
+    body["order"] = nlohmann::json::array({"custom_table_id", "id"});
+    return body;
+}
+
+nlohmann::json buildCustomFieldObjectAddBody(const std::string& physicalTableName,
+                                              const std::string& columnName,
+                                              const std::string& displayName,
+                                              const std::string& deviceType,
+                                              const std::string& constraint,
+                                              const nlohmann::json& defaultValue) {
+    // Verbatim shape captured live 2026-09-16, both the Text/non-
+    // mandatory case ("TEXT"/"NONE"/"") and the Number/mandatory case
+    // ("INTEGER"/"NOT_NULL"/0), confirmed during this plan's own
+    // Group 8 (spec.md Background).
+    nlohmann::json body;
+    body["object"] = physicalTableName;
+    body["column_name"] = columnName;
+    body["name"] = displayName;
+    body["type"] = deviceType;
+    body["constraint"] = constraint;
+    body["default_value"] = defaultValue;
+    return body;
+}
+
+nlohmann::json buildCustomFieldUpdateBody(int64_t customColumnId, const std::string& name) {
+    // NOT independently live-captured -- inferred by symmetry with
+    // every other object's own modify_objects.fcgi update shape this
+    // session (spec.md Risks). Confirm/adjust during this plan's own
+    // Group 8.
+    nlohmann::json body;
+    body["object"] = "custom_columns";
+    body["values"] = {{"name", name}};
+    body["where"] = {{"custom_columns", {{"id", customColumnId}}}};
+    return body;
+}
+
+nlohmann::json buildCustomFieldObjectRemoveBody(int64_t customColumnId) {
+    // Verbatim shape captured live 2026-09-16 -- {"ids":[id]}, same
+    // convention as buildUserTypeObjectRemoveBody.
+    nlohmann::json body;
+    body["ids"] = nlohmann::json::array({customColumnId});
     return body;
 }
 

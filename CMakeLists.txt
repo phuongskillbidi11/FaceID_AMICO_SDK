@@ -64,6 +64,7 @@ if(AMICO_BUILD_TESTS)
         test/test_holidays.cpp
         test/test_scheduled_unlocks.cpp
         test/test_user_types.cpp
+        test/test_custom_fields.cpp
         test/test_access_logs.cpp
         test/test_redaction.cpp
         test/test_query_whitelist.cpp
