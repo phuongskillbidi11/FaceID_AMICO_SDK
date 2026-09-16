@@ -149,6 +149,19 @@ std::string unescapeCStyle(const std::string& value) {
     return result;
 }
 
+/// Builds execute_actions.fcgi's own literal "key=value, key2=value2"
+/// parameters string (Relay / Door actions plan, 2026-09-16, spec.md
+/// Decision 5) -- LIVE_CONFIRMED via a static read of the device's own
+/// en_US/js/main.js: no space before the comma, one space after.
+std::string buildActionParameters(const std::vector<std::pair<std::string, std::string>>& pairs) {
+    std::string result;
+    for (size_t i = 0; i < pairs.size(); ++i) {
+        if (i > 0) result += ", ";
+        result += pairs[i].first + "=" + pairs[i].second;
+    }
+    return result;
+}
+
 }  // namespace
 
 struct AmicoClient::Impl {
@@ -445,6 +458,71 @@ struct AmicoClient::Impl {
         info.catraRoleEnabled = requireStringBoolField(secBoxSection, "catra_role", "/get_configuration.fcgi (sec_box)");
 
         return info;
+    }
+
+    std::vector<RelayAction> listRelayActions() {
+        std::vector<RelayAction> actions;
+
+        nlohmann::json relayBody = {{"general", nlohmann::json::array({"relay_count", "relay_out_mode"})}};
+        nlohmann::json relayResponse = postAuthenticatedJson("/get_configuration.fcgi", relayBody);
+        nlohmann::json relaySection = requireField<nlohmann::json>(relayResponse, "general", "/get_configuration.fcgi");
+        std::string relayCountStr = requireField<std::string>(relaySection, "relay_count", "/get_configuration.fcgi (general)");
+        std::string relayOutMode = requireField<std::string>(relaySection, "relay_out_mode", "/get_configuration.fcgi (general)");
+        int64_t relayCount = std::stoll(relayCountStr);
+
+        if (relayOutMode == "0" || relayOutMode == "1") {
+            for (int64_t relayNumber = 1; relayNumber <= relayCount; ++relayNumber) {
+                RelayAction action;
+                action.id = "door-" + std::to_string(relayNumber);
+                action.kind = RelayActionKind::Door;
+                action.label = "Open relay";
+                action.relayNumber = relayNumber;
+                actions.push_back(action);
+            }
+        }
+
+        nlohmann::json secBoxBody = {{"sec_box", nlohmann::json::array({"catra_role"})}};
+        nlohmann::json secBoxResponse = postAuthenticatedJson("/get_configuration.fcgi", secBoxBody);
+        nlohmann::json secBoxSection = requireField<nlohmann::json>(secBoxResponse, "sec_box", "/get_configuration.fcgi");
+        std::string catraRole = requireField<std::string>(secBoxSection, "catra_role", "/get_configuration.fcgi (sec_box)");
+
+        if (catraRole == "0") {
+            RelayAction action;
+            action.id = "sec_box-65793";
+            action.kind = RelayActionKind::SecBox;
+            action.label = "Open Door";
+            action.secBoxId = 65793;
+            actions.push_back(action);
+        }
+
+        return actions;
+    }
+
+    void triggerRelayAction(const std::string& id) {
+        std::vector<RelayAction> actions = listRelayActions();
+        auto it = std::find_if(actions.begin(), actions.end(), [&id](const RelayAction& a) { return a.id == id; });
+        if (it == actions.end()) {
+            throw ProtocolError("relay action id '" + id + "' does not match any currently-active action");
+        }
+
+        std::string actionName;
+        std::string parameters;
+        if (it->kind == RelayActionKind::Door) {
+            actionName = "door";
+            parameters = buildActionParameters({{"door", std::to_string(it->relayNumber)}, {"reason", "3"}});
+        } else {
+            actionName = "sec_box";
+            parameters = buildActionParameters({{"id", std::to_string(it->secBoxId)}, {"reason", "3"}});
+        }
+
+        nlohmann::json body = {{"actions", nlohmann::json::array({{{"action", actionName}, {"parameters", parameters}}})}};
+        nlohmann::json response = postAuthenticatedJson("/execute_actions.fcgi", body);
+        nlohmann::json actionsResult = requireField<nlohmann::json>(response, "actions", "/execute_actions.fcgi");
+        for (const auto& entry : actionsResult) {
+            if (entry.is_object() && entry.contains("status") && entry["status"] == "denied") {
+                throw ActionDeniedError("device denied relay action '" + id + "' (e.g. a remote-interlocking conflict)");
+            }
+        }
     }
 
     void logout() {
@@ -1911,6 +1989,10 @@ DateTimeSettings AmicoClient::getDateTimeSettings() { return getDateTimeSettings
 DateTimeSettings AmicoClient::getDateTimeSettingsImpl() { return impl_->getDateTimeSettings(); }
 LicenseInfo AmicoClient::getLicenseInfo() { return getLicenseInfoImpl(); }
 LicenseInfo AmicoClient::getLicenseInfoImpl() { return impl_->getLicenseInfo(); }
+std::vector<RelayAction> AmicoClient::listRelayActions() { return listRelayActionsImpl(); }
+std::vector<RelayAction> AmicoClient::listRelayActionsImpl() { return impl_->listRelayActions(); }
+void AmicoClient::triggerRelayAction(const std::string& id) { triggerRelayActionImpl(id); }
+void AmicoClient::triggerRelayActionImpl(const std::string& id) { impl_->triggerRelayAction(id); }
 void AmicoClient::logout() { impl_->logout(); }
 std::string AmicoClient::debugGetObjectMetadataJson() { return impl_->debugGetObjectMetadataJson(); }
 

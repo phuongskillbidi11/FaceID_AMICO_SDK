@@ -68,6 +68,18 @@ public:
     /// 2026-09-16). Read-only (spec.md Decision 1).
     LicenseInfo getLicenseInfo();
 
+    /// Currently-active door/sec_box relay actions, re-derived fresh
+    /// from device configuration (Relay / Door actions plan,
+    /// 2026-09-16).
+    std::vector<RelayAction> listRelayActions();
+
+    /// Fires one action by its `RelayAction::id` (re-resolved fresh --
+    /// spec.md Decision 1). Throws ProtocolError if `id` doesn't match
+    /// a currently-active entry (spec.md Decision 4); throws
+    /// ActionDeniedError if the device refuses the action (spec.md
+    /// Decision 3). Has an immediate real-world physical effect.
+    void triggerRelayAction(const std::string& id);
+
     /// GET /logout.fcgi. Clears the in-memory session regardless of the
     /// server's response.
     void logout();
@@ -480,6 +492,8 @@ private:
 
     DateTimeSettings getDateTimeSettingsImpl();
     LicenseInfo getLicenseInfoImpl();
+    std::vector<RelayAction> listRelayActionsImpl();
+    void triggerRelayActionImpl(const std::string& id);
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);
     std::optional<AmicoUser> getUserImpl(int64_t id);
     std::map<int64_t, std::pair<std::string, std::string>> getUserNamesByIdsImpl(const std::vector<int64_t>& ids);

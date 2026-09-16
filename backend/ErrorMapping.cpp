@@ -51,6 +51,9 @@ std::pair<int, nlohmann::json> mapException(const std::exception& e) {
     if (const auto* err = dynamic_cast<const amico::UnsupportedOperationError*>(&e)) {
         return {400, errorBody(*err, "UnsupportedOperationError")};
     }
+    if (const auto* err = dynamic_cast<const amico::ActionDeniedError*>(&e)) {
+        return {409, errorBody(*err, "ActionDeniedError")};
+    }
     return {500, errorBody(e, "InternalError")};
 }
 

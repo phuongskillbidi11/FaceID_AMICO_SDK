@@ -188,6 +188,94 @@ TEST_CASE("GET /license maps the combined license info response") {
     CHECK(body["catraRoleEnabled"] == true);
 }
 
+TEST_CASE("GET /relay-actions lists currently-active door/sec_box actions") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/get_configuration.fcgi") {
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            if (body.contains("general")) {
+                return FakeTransport::ok(nlohmann::json{
+                    {"general", {{"relay_count", "1"}, {"relay_out_mode", "0"}}}}.dump());
+            }
+            if (body.contains("sec_box")) {
+                return FakeTransport::ok(nlohmann::json{{"sec_box", {{"catra_role", "0"}}}}.dump());
+            }
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/relay-actions");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    REQUIRE(body["actions"].size() == 2);
+    CHECK(body["actions"][0]["id"] == "door-1");
+    CHECK(body["actions"][0]["kind"] == "door");
+    CHECK(body["actions"][1]["id"] == "sec_box-65793");
+    CHECK(body["actions"][1]["kind"] == "secBox");
+}
+
+TEST_CASE("POST /relay-actions/:id/trigger without the confirmation header returns 428, never calls AmicoClient") {
+    TestServer server;
+    server.fake().responder = failIfCalled;
+    auto cli = server.http();
+    auto res = cli.Post("/relay-actions/door-1/trigger", "", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 428);
+}
+
+TEST_CASE("POST /relay-actions/:id/trigger with the confirmation header succeeds") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/get_configuration.fcgi") {
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            if (body.contains("general")) {
+                return FakeTransport::ok(nlohmann::json{
+                    {"general", {{"relay_count", "1"}, {"relay_out_mode", "0"}}}}.dump());
+            }
+            if (body.contains("sec_box")) {
+                return FakeTransport::ok(nlohmann::json{{"sec_box", {{"catra_role", "0"}}}}.dump());
+            }
+        }
+        if (req.path == "/execute_actions.fcgi") {
+            return FakeTransport::ok(nlohmann::json{{"actions", nlohmann::json::array({{{"status", "ok"}}})}}.dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    httplib::Headers headers = {{"X-Confirm-Sensitive-Action", "yes"}};
+    auto res = cli.Post("/relay-actions/door-1/trigger", headers, "", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
+TEST_CASE("POST /relay-actions/:id/trigger maps a device \"denied\" status to 409") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/get_configuration.fcgi") {
+            nlohmann::json body = nlohmann::json::parse(req.body);
+            if (body.contains("general")) {
+                return FakeTransport::ok(nlohmann::json{
+                    {"general", {{"relay_count", "1"}, {"relay_out_mode", "0"}}}}.dump());
+            }
+            if (body.contains("sec_box")) {
+                return FakeTransport::ok(nlohmann::json{{"sec_box", {{"catra_role", "0"}}}}.dump());
+            }
+        }
+        if (req.path == "/execute_actions.fcgi") {
+            return FakeTransport::ok(nlohmann::json{{"actions", nlohmann::json::array({{{"status", "denied"}}})}}.dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    httplib::Headers headers = {{"X-Confirm-Sensitive-Action", "yes"}};
+    auto res = cli.Post("/relay-actions/door-1/trigger", headers, "", "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 409);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    CHECK(body["type"] == "ActionDeniedError");
+}
+
 TEST_CASE("GET /users lists users") {
     TestServer server;
     server.fake().responder = [](const HttpRequest& req) {
@@ -1692,7 +1780,8 @@ TEST_CASE("POST /login invalid URL and network failure preserve session") {
 
 TEST_CASE("Every cookie gate rejects unauthorized requests before parsing or SDK calls") {
     const std::vector<std::pair<std::string, std::string>> routes = {
-        {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/license"}, {"GET", "/users?limit=bad"},
+        {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/license"},
+        {"GET", "/relay-actions"}, {"POST", "/relay-actions/door-1/trigger"}, {"GET", "/users?limit=bad"},
         {"GET", "/users/36"}, {"POST", "/users"}, {"PATCH", "/users/36"}, {"DELETE", "/users/36"},
         {"POST", "/users/36/groups/1"}, {"DELETE", "/users/36/groups/1"},
         {"POST", "/users/36/cards"}, {"DELETE", "/cards/1"}, {"PUT", "/users/36/administrator"},

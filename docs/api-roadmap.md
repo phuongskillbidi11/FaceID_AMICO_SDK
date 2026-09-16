@@ -865,6 +865,75 @@ then zero bugs on re-run:**
 
 ---
 
+## 12. Relay / Door actions (sidebar "Open relay" / "Open Door") — ✅ implemented and live-verified (2026-09-16, `.plans/2026-09-16-relay-door-actions/`)
+
+`LIVE_CONFIRMED` via a static read of the device's own `en_US/js/main.js`
+(`updateRelaysData()`/`drawRelaysMenu()`, no live-device call needed for
+this part) plus a gated read-only live check
+(`APPROVE_LIVE_DEVICE_TEST:2026-09-16-relay-door-discovery`,
+user-approved verbatim):
+
+The sidebar's "Open relay"/"Open Door" buttons are two instances of a
+single dynamic mechanism: the device builds a list of actionable
+outputs (`relays`) from its current configuration, and each list entry
+fires via one shared endpoint:
+```
+POST /execute_actions.fcgi {"actions":[{"action":"<name>","parameters":"<comma-string>"}]}
+```
+`parameters` is a **literal comma-separated key=value string**, not
+nested JSON — a wire convention this project has not seen before (e.g.
+`"door=1, reason=3"`, exact spacing: no space before the comma, one
+space after).
+
+Which entries appear depends on device config, discovered via 3
+`get_configuration.fcgi` reads:
+- `general.relay_count` / `general.relay_out_mode` — how many
+  `"door"`-type relay entries exist (`action:"door"`,
+  `parameters:"door=<relay number 1..relay_count>, reason=3"`).
+- `sec_box.catra_role` (the **same field** exposed by
+  `LicenseInfo.catraRoleEnabled` in the already-shipped License Mode
+  plan) — `catra_role == "0"` means **SecBox mode**, adding one
+  `"Open Door"` entry (`action:"sec_box"`,
+  `parameters:"id=<secBoxId>, reason=3"`); `catra_role != "0"` means
+  **iDBlockNext/Catra (turnstile) mode**, adding rotate actions
+  (`action:"catra"`, `parameters:"allow=clockwise|anticlockwise|both, reason=3"`)
+  instead. **This refines what `catra_role` actually represents** —
+  it is an operating-role selector between SecBox and
+  turnstile/Catra integration, not a generic "license" flag; the
+  device's own Settings UI just happens to label the tile "License
+  Mode".
+- Also present but explicitly out of scope for the first pass: siren
+  (`action:"siren_play"`/`"siren_stop"`) and bell
+  (`action:"bell_ding_dong"`/`"bell_dong"`) entries, which use a
+  mousedown/mouseup (hold-to-activate) pattern rather than a single
+  click — a materially different interaction model, deferred.
+
+**This device's own current state** (2026-09-16):
+`relay_count="1"`, `relay_out_mode="0"` (NORMAL_ACCESS), `catra_role="0"`
+(SecBox mode) → exactly 2 active entries: `"Open relay"` (door, relay
+1) and `"Open Door"` (sec_box, id `65793`) — matching the original 2
+sidebar buttons this item was named after.
+
+**Response shape not yet captured** — the JS only checks for a literal
+`actions[].status === "denied"` (remote interlocking conflict); the
+success-path response body was not observed during static/read-only
+discovery and needs a live write-approved trigger to capture.
+
+| Method | Path | Device call |
+|---|---|---|
+| ✅ | `GET /relay-actions` | The 3 `get_configuration.fcgi` reads above, combined into a list of currently-active door/sec_box actions (siren/bell/catra deferred) |
+| ✅ | `POST /relay-actions/:id/trigger` | `execute_actions.fcgi` with the resolved `action`/`parameters` for that entry -- **LIVE-VERIFIED 2026-09-16**: triggered "Open relay" (`door-1`) for real, got `200 {"success":true}` back from our backend (the device's own raw response wasn't independently visible -- an internal backend<->device call -- but the SDK's own strict `actions` field parsing succeeded without error, confirming the shape), and the user independently confirmed the real relay physically activated |
+
+**Safety note**: unlike every other write this project has
+implemented, triggering this action has an **immediate real-world
+physical effect** (unlocks a real door/relay on the device's
+installation) — not just a database mutation. Live verification of the
+write path requires explicit written confirmation immediately before
+triggering, in addition to the standard
+`APPROVE_LIVE_DEVICE_WRITE_TEST` token.
+
+---
+
 ## 11. 🔍 Discovery pending — no protocol evidence yet
 
 These sidebar areas exist on the real device but have **not** been
@@ -878,8 +947,7 @@ pass) confirms the real object names/fields/commands.
 | Alarm Output (`alarmconfig.html`) | Medium | |
 | Data Tools → Import (`import.html`) | High — likely bulk write, needs care | |
 | Data Tools → Export (`export.html`) | Medium — likely reuses the `export_objects`/backup flow already seen referencing `portal_rules` etc. in the 48-command pass | |
-| Open relay (sidebar direct-action button) | Low — a single immediate device action, no confirmation needed per `feedback_write_api_risk_tiers.md` | |
-| Open Door (sidebar direct-action button) | Low — same as above | |
+| Open relay / Open Door (sidebar direct-action buttons) | Low, risk-tier-wise — but a **real physical action** (unlocks a real door/relay) — see section 12, discovery complete 2026-09-16, plan in progress | |
 | Settings — other tiles (Network, Identification Methods, Facial Settings, and ~68 more per the "73 tiles" count noted in the Areas/Portals finding) | Varies | License Mode ✅ and Date and Time ✅ implemented; Operation Mode fixed ad-hoc (online/offline toggle only, no `GET`/`PUT` endpoint written) -- everything else still unopened |
 
 ---

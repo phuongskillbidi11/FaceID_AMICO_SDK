@@ -293,6 +293,33 @@ fields, never merged (see `include/amico/Types.hpp`'s own
 }
 ```
 
+### `GET /relay-actions`
+Read-only list of the currently-active door/sec_box relay actions
+(Relay / Door actions plan, 2026-09-16), re-derived fresh from device
+configuration on every call (never cached). `200` with
+`{"actions": [<RelayAction JSON>, ...]}`, each entry:
+```json
+{"id": "door-1", "kind": "door", "label": "Open relay", "relayNumber": 1, "secBoxId": 0}
+```
+`kind` is `"door"` or `"secBox"`. Only door/sec_box kinds are exposed
+-- siren, bell, and catra/turnstile kinds are deliberately out of
+scope for this first pass (see `include/amico/Types.hpp`'s own
+`RelayAction` doc comment).
+
+### `POST /relay-actions/:id/trigger`
+**Fires a real physical action** (unlocks a relay/door) -- requires
+the `X-Confirm-Sensitive-Action: yes` header, same bar as
+`setPassword`/`setAdministrator`, even though the shipped frontend
+fires it immediately on click with no per-attempt end-user
+confirmation dialog (`feedback_write_api_risk_tiers.md`: relay/
+turnstile writes don't need one). `:id` must match a currently-active
+entry from `GET /relay-actions` (re-resolved fresh on every trigger
+call, never trusts a stale client-cached shape) -- `502 ProtocolError`
+if not found. `200 {"success": true}` on success; `409
+ActionDeniedError` if the device refuses the action at the business
+level (e.g. a remote-interlocking conflict -- "close the other open
+door first").
+
 ### `GET /users?limit=&offset=`
 `200` with a JSON array of user objects (see the User object shape
 below). `limit`/`offset` are optional integers.

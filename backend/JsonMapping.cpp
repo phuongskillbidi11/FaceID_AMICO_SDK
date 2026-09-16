@@ -103,6 +103,16 @@ nlohmann::json toJson(const amico::LicenseInfo& info) {
     };
 }
 
+nlohmann::json toJson(const amico::RelayAction& action) {
+    return {
+        {"id", action.id},
+        {"kind", action.kind == amico::RelayActionKind::Door ? "door" : "secBox"},
+        {"label", action.label},
+        {"relayNumber", action.relayNumber},
+        {"secBoxId", action.secBoxId},
+    };
+}
+
 nlohmann::json toJson(const amico::Holiday& holiday) {
     return {
         {"id", holiday.id}, {"name", holiday.name}, {"start", holiday.start},

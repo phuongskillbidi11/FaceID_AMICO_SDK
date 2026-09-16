@@ -202,6 +202,44 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Relay / Door actions (2026-09-16-relay-door-actions) -- read-only
+    // list, no X-Confirm-Sensitive-Action header (nothing here mutates
+    // device state).
+    svr.Get("/relay-actions", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            nlohmann::json actions = nlohmann::json::array();
+            for (const auto& action : client.listRelayActions()) {
+                actions.push_back(toJson(action));
+            }
+            res.set_content(nlohmann::json{{"actions", actions}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    // Triggers a real physical action (unlocks a relay/door) -- requires
+    // X-Confirm-Sensitive-Action, same bar as setPassword/
+    // setAdministrator, even though the shipped frontend fires it
+    // without a per-click end-user confirmation dialog
+    // (feedback_write_api_risk_tiers.md).
+    svr.Post(R"(/relay-actions/([^/]+)/trigger)", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        if (!requireConfirmationHeader(req, res)) {
+            return;
+        }
+        try {
+            client.triggerRelayAction(req.matches[1]);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     svr.Get("/users", [&](const httplib::Request& req, httplib::Response& res) {
         auto lock = sessionStore.acquire();
         if (!requireSession(req, res, sessionStore)) return;

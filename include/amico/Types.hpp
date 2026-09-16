@@ -72,6 +72,29 @@ struct LicenseInfo {
     bool catraRoleEnabled = false;
 };
 
+/// Which shared execute_actions.fcgi "action" name a RelayAction maps
+/// to (Relay / Door actions plan, 2026-09-16). Only these 2 of the 5
+/// kinds the real device supports are implemented -- spec.md
+/// Decision 2 (siren/bell use a hold-to-activate interaction; catra
+/// requires a device mode never observed live).
+enum class RelayActionKind {
+    Door,
+    SecBox,
+};
+
+/// One currently-active relay/door action, re-derived fresh from the
+/// device's own configuration every time (never cached -- spec.md
+/// Decision 1). `id` is a stable composite key
+/// (e.g. "door-1"/"sec_box-65793") used to re-select this exact entry
+/// on trigger.
+struct RelayAction {
+    std::string id;
+    RelayActionKind kind = RelayActionKind::Door;
+    std::string label;        // matches the device's own sidebar label, e.g. "Open relay" / "Open Door"
+    int64_t relayNumber = 0;  // valid when kind == Door
+    int64_t secBoxId = 0;     // valid when kind == SecBox
+};
+
 /// Public user-facing view of the `users` object. Deliberately has no
 /// `password`, `salt`, `panic_password`, or `panic_salt` member.
 /// `hasPassword` is the one exception to "never requested": the SDK

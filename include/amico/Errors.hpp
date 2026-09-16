@@ -95,4 +95,14 @@ public:
     explicit UnsupportedOperationError(const std::string& message) : AmicoError(message) {}
 };
 
+/// The device returned a 2xx response to `execute_actions.fcgi` but denied
+/// the requested action at the business level (`actions[].status ==
+/// "denied"`) -- e.g. a remote-interlocking conflict on a door/relay
+/// action. Distinct from ProtocolError: the response shape matched
+/// evidence, the device simply refused the action.
+class ActionDeniedError : public AmicoError {
+public:
+    explicit ActionDeniedError(const std::string& message) : AmicoError(message) {}
+};
+
 }  // namespace amico
