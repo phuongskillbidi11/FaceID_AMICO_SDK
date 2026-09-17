@@ -188,6 +188,69 @@ TEST_CASE("GET /license maps the combined license info response") {
     CHECK(body["catraRoleEnabled"] == true);
 }
 
+TEST_CASE("GET /internal-alarms maps the internal alarm settings response") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/get_configuration.fcgi") {
+            return FakeTransport::ok(nlohmann::json{
+                {"alarm",
+                 {{"door_sensor_enabled", "1"},
+                  {"door_sensor_delay", "10"},
+                  {"door_sensor_alarm_timeout_after_closure", "20"},
+                  {"forced_access_enabled", "0"},
+                  {"forced_access_debounce", "30"},
+                  {"device_violation_enabled", "1"},
+                  {"panic_finger_enabled", "0"},
+                  {"panic_card_enabled", "1"},
+                  {"panic_finger_delay", "120"}}}}
+                .dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/internal-alarms");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    CHECK(body["doorSensorEnabled"] == true);
+    CHECK(body["doorSensorDelay"] == 10);
+    CHECK(body["doorSensorAlarmTimeoutAfterClosure"] == 20);
+    CHECK(body["forcedAccessEnabled"] == false);
+    CHECK(body["forcedAccessDebounce"] == 30);
+    CHECK(body["deviceViolationEnabled"] == true);
+    CHECK(body["panicFingerEnabled"] == false);
+    CHECK(body["panicCardEnabled"] == true);
+    CHECK(body["panicFingerDelay"] == 120);
+}
+
+TEST_CASE("PUT /internal-alarms without the confirmation header returns 428, never calls AmicoClient") {
+    TestServer server;
+    server.fake().responder = failIfCalled;
+    auto cli = server.http();
+    auto res = cli.Put("/internal-alarms",
+                       R"({"doorSensorEnabled":true,"doorSensorDelay":10,"doorSensorAlarmTimeoutAfterClosure":20,"forcedAccessEnabled":false,"forcedAccessDebounce":30,"deviceViolationEnabled":true,"panicFingerEnabled":false,"panicCardEnabled":true,"panicFingerDelay":120})",
+                       "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 428);
+}
+
+TEST_CASE("PUT /internal-alarms with the confirmation header succeeds") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/set_configuration.fcgi") {
+            return FakeTransport::ok("{}");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    httplib::Headers headers = {{"X-Confirm-Sensitive-Action", "yes"}};
+    auto res = cli.Put("/internal-alarms", headers,
+                       R"({"doorSensorEnabled":true,"doorSensorDelay":10,"doorSensorAlarmTimeoutAfterClosure":20,"forcedAccessEnabled":false,"forcedAccessDebounce":30,"deviceViolationEnabled":true,"panicFingerEnabled":false,"panicCardEnabled":true,"panicFingerDelay":120})",
+                       "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("GET /relay-actions lists currently-active door/sec_box actions") {
     TestServer server;
     server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
@@ -1781,7 +1844,8 @@ TEST_CASE("POST /login invalid URL and network failure preserve session") {
 TEST_CASE("Every cookie gate rejects unauthorized requests before parsing or SDK calls") {
     const std::vector<std::pair<std::string, std::string>> routes = {
         {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/license"},
-        {"GET", "/relay-actions"}, {"POST", "/relay-actions/door-1/trigger"}, {"GET", "/users?limit=bad"},
+        {"GET", "/internal-alarms"}, {"PUT", "/internal-alarms"}, {"GET", "/relay-actions"},
+        {"POST", "/relay-actions/door-1/trigger"}, {"GET", "/users?limit=bad"},
         {"GET", "/users/36"}, {"POST", "/users"}, {"PATCH", "/users/36"}, {"DELETE", "/users/36"},
         {"POST", "/users/36/groups/1"}, {"DELETE", "/users/36/groups/1"},
         {"POST", "/users/36/cards"}, {"DELETE", "/cards/1"}, {"PUT", "/users/36/administrator"},

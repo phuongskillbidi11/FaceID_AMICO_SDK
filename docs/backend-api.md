@@ -51,7 +51,8 @@ The following existing deployment and sensitive-action guardrails remain:
    authorization layer (a reverse proxy, an API gateway, a VPN — this
    backend provides none of these) in front of this server.**
 2. **Sensitive-action confirmation header.** `PUT
-   /users/:id/administrator` and `PUT /users/:id/password` both
+   /users/:id/administrator`, `PUT /users/:id/password`, `PUT
+   /internal-alarms`, and `POST /relay-actions/:id/trigger` all
    require the request header `X-Confirm-Sensitive-Action: yes`.
    Without it, the request is rejected with `428 Precondition
    Required` after a valid session-cookie check, before the device is contacted. This only prevents
@@ -213,7 +214,7 @@ successfully parsed:
 | any other error | 500 |
 
 Plus: `404 Not Found` for `GET /users/:id` on a missing user, and `428
-Precondition Required` for the two sensitive routes without the
+Precondition Required` for sensitive routes without the
 confirmation header (see the security section).
 
 ---
@@ -292,6 +293,35 @@ fields, never merged (see `include/amico/Types.hpp`'s own
   "maxUsers": 200000, "device": 0, "type": 0, "catraRoleEnabled": false
 }
 ```
+
+### `GET /internal-alarms`
+Read-only (Internal Alarms settings plan, 2026-09-16). Returns the
+device's complete Internal Alarms settings as typed backend JSON:
+```json
+{
+  "doorSensorEnabled": true,
+  "doorSensorDelay": 10,
+  "doorSensorAlarmTimeoutAfterClosure": 0,
+  "forcedAccessEnabled": true,
+  "forcedAccessDebounce": 0,
+  "deviceViolationEnabled": true,
+  "panicFingerEnabled": true,
+  "panicCardEnabled": false,
+  "panicFingerDelay": 120
+}
+```
+The device returns all nine underlying values as JSON strings. The
+backend converts the five `"0"`/`"1"` values to booleans and the four
+numeric strings to JSON integers.
+
+### `PUT /internal-alarms` — 🔒 requires `X-Confirm-Sensitive-Action: yes`
+Full-replace write: the request body must contain all nine fields in
+the same typed camelCase shape shown for `GET /internal-alarms`.
+Missing or wrongly typed fields return `400 InvalidRequest`; without
+the confirmation header, the route returns `428`. The SDK sends every
+field to the device as a JSON string in one `set_configuration.fcgi`
+call, matching the device's own all-or-nothing Save behavior. Success:
+`200 {"success": true}`. There is no partial-update route.
 
 ### `GET /relay-actions`
 Read-only list of the currently-active door/sec_box relay actions

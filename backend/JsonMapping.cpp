@@ -103,6 +103,35 @@ nlohmann::json toJson(const amico::LicenseInfo& info) {
     };
 }
 
+nlohmann::json toJson(const amico::InternalAlarmSettings& settings) {
+    return {
+        {"doorSensorEnabled", settings.doorSensorEnabled},
+        {"doorSensorDelay", settings.doorSensorDelay},
+        {"doorSensorAlarmTimeoutAfterClosure", settings.doorSensorAlarmTimeoutAfterClosure},
+        {"forcedAccessEnabled", settings.forcedAccessEnabled},
+        {"forcedAccessDebounce", settings.forcedAccessDebounce},
+        {"deviceViolationEnabled", settings.deviceViolationEnabled},
+        {"panicFingerEnabled", settings.panicFingerEnabled},
+        {"panicCardEnabled", settings.panicCardEnabled},
+        {"panicFingerDelay", settings.panicFingerDelay},
+    };
+}
+
+amico::InternalAlarmSettings fromJsonInternalAlarmSettings(const nlohmann::json& body) {
+    amico::InternalAlarmSettings settings;
+    settings.doorSensorEnabled = body.at("doorSensorEnabled").get<bool>();
+    settings.doorSensorDelay = body.at("doorSensorDelay").get<int64_t>();
+    settings.doorSensorAlarmTimeoutAfterClosure =
+        body.at("doorSensorAlarmTimeoutAfterClosure").get<int64_t>();
+    settings.forcedAccessEnabled = body.at("forcedAccessEnabled").get<bool>();
+    settings.forcedAccessDebounce = body.at("forcedAccessDebounce").get<int64_t>();
+    settings.deviceViolationEnabled = body.at("deviceViolationEnabled").get<bool>();
+    settings.panicFingerEnabled = body.at("panicFingerEnabled").get<bool>();
+    settings.panicCardEnabled = body.at("panicCardEnabled").get<bool>();
+    settings.panicFingerDelay = body.at("panicFingerDelay").get<int64_t>();
+    return settings;
+}
+
 nlohmann::json toJson(const amico::RelayAction& action) {
     return {
         {"id", action.id},

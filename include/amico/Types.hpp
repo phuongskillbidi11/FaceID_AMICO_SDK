@@ -95,6 +95,27 @@ struct RelayAction {
     int64_t secBoxId = 0;     // valid when kind == SecBox
 };
 
+/// Combined read/write of the device's Internal Alarms settings
+/// (Internal Alarms settings plan, 2026-09-16). Full-replace write
+/// only (spec.md Decision 2) -- the device's own Save button always
+/// resends every field; there is no partial-update path. Boolean
+/// fields are read/written as the JSON-string "0"/"1" convention
+/// (LIVE_CONFIRMED via the device's own write-side JS; see
+/// requireStringBoolField()). Numeric fields' exact JSON read-side
+/// type was confirmed live in this plan's own Task 1.1 -- see
+/// DECISION_LOG.md.
+struct InternalAlarmSettings {
+    bool doorSensorEnabled = false;
+    int64_t doorSensorDelay = 0;
+    int64_t doorSensorAlarmTimeoutAfterClosure = 0;
+    bool forcedAccessEnabled = false;
+    int64_t forcedAccessDebounce = 0;
+    bool deviceViolationEnabled = false;
+    bool panicFingerEnabled = false;
+    bool panicCardEnabled = false;
+    int64_t panicFingerDelay = 0;
+};
+
 /// Public user-facing view of the `users` object. Deliberately has no
 /// `password`, `salt`, `panic_password`, or `panic_salt` member.
 /// `hasPassword` is the one exception to "never requested": the SDK

@@ -202,6 +202,42 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    // Internal Alarms settings (2026-09-16-internal-alarms-settings).
+    // Reading is side-effect free; replacing the device-wide settings
+    // requires explicit confirmation.
+    svr.Get("/internal-alarms", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        try {
+            res.set_content(toJson(client.getInternalAlarmSettings()).dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
+    svr.Put("/internal-alarms", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        auto& client = *sessionStore.client();
+        amico::InternalAlarmSettings settings;
+        try {
+            settings = fromJsonInternalAlarmSettings(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        if (!requireConfirmationHeader(req, res)) {
+            return;
+        }
+        try {
+            client.setInternalAlarmSettings(settings);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     // Relay / Door actions (2026-09-16-relay-door-actions) -- read-only
     // list, no X-Confirm-Sensitive-Action header (nothing here mutates
     // device state).

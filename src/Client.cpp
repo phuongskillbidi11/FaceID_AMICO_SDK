@@ -460,6 +460,55 @@ struct AmicoClient::Impl {
         return info;
     }
 
+    InternalAlarmSettings getInternalAlarmSettings() {
+        nlohmann::json body = {{"alarm", nlohmann::json::array({
+            "door_sensor_enabled",
+            "door_sensor_delay",
+            "door_sensor_alarm_timeout_after_closure",
+            "forced_access_enabled",
+            "forced_access_debounce",
+            "device_violation_enabled",
+            "panic_finger_enabled",
+            "panic_card_enabled",
+            "panic_finger_delay",
+        })}};
+        nlohmann::json response = postAuthenticatedJson("/get_configuration.fcgi", body);
+        nlohmann::json alarm = requireField<nlohmann::json>(response, "alarm", "/get_configuration.fcgi");
+        const std::string alarmPath = "/get_configuration.fcgi (alarm)";
+
+        InternalAlarmSettings settings;
+        settings.doorSensorEnabled = requireStringBoolField(alarm, "door_sensor_enabled", alarmPath);
+        settings.doorSensorDelay =
+            std::stoll(requireField<std::string>(alarm, "door_sensor_delay", alarmPath));
+        settings.doorSensorAlarmTimeoutAfterClosure = std::stoll(
+            requireField<std::string>(alarm, "door_sensor_alarm_timeout_after_closure", alarmPath));
+        settings.forcedAccessEnabled = requireStringBoolField(alarm, "forced_access_enabled", alarmPath);
+        settings.forcedAccessDebounce =
+            std::stoll(requireField<std::string>(alarm, "forced_access_debounce", alarmPath));
+        settings.deviceViolationEnabled = requireStringBoolField(alarm, "device_violation_enabled", alarmPath);
+        settings.panicFingerEnabled = requireStringBoolField(alarm, "panic_finger_enabled", alarmPath);
+        settings.panicCardEnabled = requireStringBoolField(alarm, "panic_card_enabled", alarmPath);
+        settings.panicFingerDelay =
+            std::stoll(requireField<std::string>(alarm, "panic_finger_delay", alarmPath));
+        return settings;
+    }
+
+    void setInternalAlarmSettings(const InternalAlarmSettings& settings) {
+        nlohmann::json body = {{"alarm", {
+            {"door_sensor_enabled", settings.doorSensorEnabled ? "1" : "0"},
+            {"door_sensor_delay", std::to_string(settings.doorSensorDelay)},
+            {"door_sensor_alarm_timeout_after_closure",
+             std::to_string(settings.doorSensorAlarmTimeoutAfterClosure)},
+            {"forced_access_enabled", settings.forcedAccessEnabled ? "1" : "0"},
+            {"forced_access_debounce", std::to_string(settings.forcedAccessDebounce)},
+            {"device_violation_enabled", settings.deviceViolationEnabled ? "1" : "0"},
+            {"panic_finger_enabled", settings.panicFingerEnabled ? "1" : "0"},
+            {"panic_card_enabled", settings.panicCardEnabled ? "1" : "0"},
+            {"panic_finger_delay", std::to_string(settings.panicFingerDelay)},
+        }}};
+        postAuthenticatedJson("/set_configuration.fcgi", body);
+    }
+
     std::vector<RelayAction> listRelayActions() {
         std::vector<RelayAction> actions;
 
@@ -1989,6 +2038,14 @@ DateTimeSettings AmicoClient::getDateTimeSettings() { return getDateTimeSettings
 DateTimeSettings AmicoClient::getDateTimeSettingsImpl() { return impl_->getDateTimeSettings(); }
 LicenseInfo AmicoClient::getLicenseInfo() { return getLicenseInfoImpl(); }
 LicenseInfo AmicoClient::getLicenseInfoImpl() { return impl_->getLicenseInfo(); }
+InternalAlarmSettings AmicoClient::getInternalAlarmSettings() { return getInternalAlarmSettingsImpl(); }
+InternalAlarmSettings AmicoClient::getInternalAlarmSettingsImpl() { return impl_->getInternalAlarmSettings(); }
+void AmicoClient::setInternalAlarmSettings(const InternalAlarmSettings& settings) {
+    setInternalAlarmSettingsImpl(settings);
+}
+void AmicoClient::setInternalAlarmSettingsImpl(const InternalAlarmSettings& settings) {
+    impl_->setInternalAlarmSettings(settings);
+}
 std::vector<RelayAction> AmicoClient::listRelayActions() { return listRelayActionsImpl(); }
 std::vector<RelayAction> AmicoClient::listRelayActionsImpl() { return impl_->listRelayActions(); }
 void AmicoClient::triggerRelayAction(const std::string& id) { triggerRelayActionImpl(id); }

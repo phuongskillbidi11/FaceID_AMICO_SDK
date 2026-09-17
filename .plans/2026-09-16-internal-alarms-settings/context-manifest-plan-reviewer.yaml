@@ -1,0 +1,7 @@
+role: plan-reviewer
+plan: 2026-09-16-internal-alarms-settings
+generated_at: 2026-09-16T16:31:18Z
+request: "Add read + write support for the device's Settings → \"Internal\nAlarms\" page (`alarmint.html`), closing `docs/api-roadmap.md`'s\n\"Discovery pending\" row for it. This is this project's **first\n`set_configuration.fcgi` write** — every prior settings-style plan\n(Date and Time, License Mode) deliberately deferred its own write\nside; this one implements both sides in one pass because the device\nitself only ever exposes this as a single combined settings form (no\nseparate read-only sub-view exists to ship alone).\n\n**Done looks like:** `AmicoClient::getInternalAlarmSettings()` reads\nthe current settings; `AmicoClient::setInternalAlarmSettings(...)`\nwrites all of them in one call (full-replace, matching the device's\nown Save button, which always sends every field together — there is\nno partial-update affordance in the real UI); `GET`/`PUT\n/internal-alarms` expose both; a Settings-style form on the frontend.\n\n**IMPORTANT — this plan is written for hand-off to the Codex CLI\nexecutor backend**, per this session's own established pattern\n(`eng tools invoke executor codex.execute <plan-dir> \"<task>\"` per\ntask, per `core/executor/METHOD.md`). The Planner (this session) does\n**not** implement any part of this plan — see \"Execution model\" below.\n\n---"
+risk_level: feature
+requires_approval: true
+project_sections:

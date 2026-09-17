@@ -68,6 +68,15 @@ public:
     /// 2026-09-16). Read-only (spec.md Decision 1).
     LicenseInfo getLicenseInfo();
 
+    /// Reads the device's current Internal Alarms settings (Internal
+    /// Alarms settings plan, 2026-09-16).
+    InternalAlarmSettings getInternalAlarmSettings();
+
+    /// Full-replace write of Internal Alarms settings (spec.md
+    /// Decision 2 -- always sends every field, matching the device's own
+    /// Save button). Changes real security-relevant device behavior.
+    void setInternalAlarmSettings(const InternalAlarmSettings& settings);
+
     /// Currently-active door/sec_box relay actions, re-derived fresh
     /// from device configuration (Relay / Door actions plan,
     /// 2026-09-16).
@@ -492,6 +501,8 @@ private:
 
     DateTimeSettings getDateTimeSettingsImpl();
     LicenseInfo getLicenseInfoImpl();
+    InternalAlarmSettings getInternalAlarmSettingsImpl();
+    void setInternalAlarmSettingsImpl(const InternalAlarmSettings& settings);
     std::vector<RelayAction> listRelayActionsImpl();
     void triggerRelayActionImpl(const std::string& id);
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);

@@ -19,6 +19,7 @@
   <script defer src="reports.js"></script>
   <script defer src="system-info.js"></script>
   <script defer src="relay-actions.js"></script>
+  <script defer src="internal-alarms.js"></script>
   <script defer src="login.js"></script>
 </head>
 <body>
@@ -77,6 +78,7 @@
       </div>
       <button type="button" data-tab="system-info" aria-controls="tab-system-info" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>System Information</span></button>
       <button type="button" data-tab="relay-actions" aria-controls="tab-relay-actions" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0"/></svg><span>Relay / Door Actions</span></button>
+      <button type="button" data-tab="internal-alarms" aria-controls="tab-internal-alarms" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span>Internal Alarms</span></button>
     </nav>
     <main id="device-content" hidden>
       <div id="tab-users" hidden><h2>Users</h2></div>
@@ -92,6 +94,7 @@
       <div id="tab-reports" hidden><p class="breadcrumb">Reports › Reports</p><h2>Reports</h2></div>
       <div id="tab-system-info" hidden><h2>System Information</h2></div>
       <div id="tab-relay-actions" hidden><h2>Relay / Door Actions</h2></div>
+      <div id="tab-internal-alarms" hidden><h2>Internal Alarms</h2></div>
     </main>
   </div>
 </body>

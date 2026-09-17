@@ -934,6 +934,60 @@ triggering, in addition to the standard
 
 ---
 
+## 13. Internal Alarms (Settings → Internal Alarms) — ✅ implemented and live-verified (2026-09-16/17, `.plans/2026-09-16-internal-alarms-settings/`)
+
+The device's own `en_US/js/pages/alarm_int.js` statically confirms
+that `alarmint.html` reads all nine settings in one call:
+```
+POST /get_configuration.fcgi {"alarm":[
+  "door_sensor_enabled", "door_sensor_delay",
+  "door_sensor_alarm_timeout_after_closure",
+  "forced_access_enabled", "forced_access_debounce",
+  "device_violation_enabled",
+  "panic_finger_enabled", "panic_card_enabled", "panic_finger_delay"
+]}
+```
+
+Task 1.1's gated live read confirmed the exact response shape:
+```json
+{"alarm":{"door_sensor_enabled":"1","door_sensor_delay":"10","door_sensor_alarm_timeout_after_closure":"0","forced_access_enabled":"1","forced_access_debounce":"0","device_violation_enabled":"1","panic_finger_enabled":"1","panic_card_enabled":"0","panic_finger_delay":"120"}}
+```
+All nine values are JSON strings. In particular, the four numeric
+fields (`door_sensor_delay`,
+`door_sensor_alarm_timeout_after_closure`, `forced_access_debounce`,
+and `panic_finger_delay`) are JSON number-strings rather than JSON
+numbers. The SDK parses those strings as integers and exposes them as
+JSON numbers through the backend; it maps the other five `"0"`/`"1"`
+strings to booleans.
+
+The same device script confirms that Save is a full-replace operation
+which sends every value as a JSON string in one call:
+```
+POST /set_configuration.fcgi {"alarm": {
+  "door_sensor_enabled": "0"|"1",
+  "door_sensor_delay": "<raw .val() string>",
+  "door_sensor_alarm_timeout_after_closure": "<raw .val() string>",
+  "forced_access_enabled": "0"|"1",
+  "forced_access_debounce": "<raw .val() string>",
+  "device_violation_enabled": "0"|"1",
+  "panic_finger_enabled": "0"|"1",
+  "panic_card_enabled": "0"|"1",
+  "panic_finger_delay": "<raw .val() string>"
+}}
+```
+The backend therefore exposes a full-replace `PUT`, not a partial
+`PATCH`, and requires `X-Confirm-Sensitive-Action: yes` because these
+settings affect device-wide security behavior. Task 8.2 live verification
+captured the device write response as `{"success":true}` for HTTP 200 and
+confirmed exact restoration of the original values.
+
+| Method | Path | Device call |
+|---|---|---|
+| ✅ | `GET /internal-alarms` | The nine-field `get_configuration.fcgi` read above, mapped to typed camelCase JSON |
+| ✅ | `PUT /internal-alarms` | Full-replace `set_configuration.fcgi` write above; requires `X-Confirm-Sensitive-Action: yes` |
+
+---
+
 ## 11. 🔍 Discovery pending — no protocol evidence yet
 
 These sidebar areas exist on the real device but have **not** been
@@ -943,7 +997,6 @@ pass) confirms the real object names/fields/commands.
 
 | Sidebar area | Likely difficulty | Notes |
 |---|---|---|
-| Internal Alarms (`alarmint.html`) | Medium | |
 | Alarm Output (`alarmconfig.html`) | Medium | |
 | Data Tools → Import (`import.html`) | High — likely bulk write, needs care | |
 | Data Tools → Export (`export.html`) | Medium — likely reuses the `export_objects`/backup flow already seen referencing `portal_rules` etc. in the 48-command pass | |
@@ -967,7 +1020,7 @@ least a discovery pass** — the entire sidebar area has been covered.
 Fields (section 10d) — full CRUD reusing the confirmed
 `object_add_field.fcgi`/`object_remove_fields.fcgi` sequence, following
 User Types' own established narrow-API precedent. Outside Enroll,
-Internal Alarms, Alarm Output, and the Settings/Data Tools items in
+Alarm Output and the Settings/Data Tools items in
 this section's own table are the next areas needing a first discovery
 pass.
 
