@@ -256,6 +256,35 @@ void registerAll(httplib::Server& svr, SessionStore& sessionStore) {
         }
     });
 
+    svr.Get("/alarm-output", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        try {
+            res.set_content(toJson(sessionStore.client()->getAlarmOutputSettings()).dump(), "application/json");
+        } catch (const std::exception& e) { respondError(res, e); }
+    });
+
+    svr.Put("/alarm-output", [&](const httplib::Request& req, httplib::Response& res) {
+        auto lock = sessionStore.acquire();
+        if (!requireSession(req, res, sessionStore)) return;
+        amico::AlarmOutputSettings settings;
+        try {
+            settings = fromJsonAlarmOutputSettings(nlohmann::json::parse(req.body));
+        } catch (const std::exception& e) {
+            respondInvalidRequest(res, e.what());
+            return;
+        }
+        if (!requireConfirmationHeader(req, res)) {
+            return;
+        }
+        try {
+            sessionStore.client()->setAlarmOutputSettings(settings);
+            res.set_content(nlohmann::json{{"success", true}}.dump(), "application/json");
+        } catch (const std::exception& e) {
+            respondError(res, e);
+        }
+    });
+
     // Triggers a real physical action (unlocks a relay/door) -- requires
     // X-Confirm-Sensitive-Action, same bar as setPassword/
     // setAdministrator, even though the shipped frontend fires it

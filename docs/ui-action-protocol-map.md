@@ -224,7 +224,11 @@ for Giai đoạn 1b, not investigated — carried forward):
 - **Data Tools > Import/Export** (`import.html` / `export.html`) — a
   full data export/backup page, distinct from the per-report "Export"
   button already covered below.
-- **Internal Alarms** / **Alarm Output** pages — never visited.
+- **Alarm Output** (`alarmconfig.html`) — current firmware surface live-read
+  as Settings → “Relay and GPIOs”; exact GET payload and values are recorded
+  in `.plans/2026-09-17-alarm-output/spec.md`. Static handler evidence is in
+  `docs/api-roadmap.md`; no write implementation yet. Internal Alarms was
+  live-verified separately in the 2026-09-16/17 plan.
 - Dashboard-level **"Open relay"** / **"Open Door"** controls — never
   clicked (live physical-door/relay actions; explicitly out of scope for
   any read-only discovery pass).

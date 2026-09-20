@@ -988,18 +988,78 @@ confirmed exact restoration of the original values.
 
 ---
 
-## 11. 🔍 Discovery pending — no protocol evidence yet
+## 14. Alarm Output (Settings → Alarm Output) — ✅ implemented and live-verified (2026-09-17/20, `.plans/2026-09-17-alarm-output/`)
+
+**This feature was redesigned mid-plan.** It was originally built
+(2026-09-17) against the device reachable at that time
+(`192.168.2.156`, firmware `2.4.5`), which exposed a 17-field
+"Relay and GPIOs" configuration. That physical unit was permanently
+returned to the factory; the only device reachable from 2026-09-20
+onward (`192.168.3.66`, firmware `1.8.7`) exposes a completely
+different, much simpler `alarm_config.js` shape. Per this project's
+own standing rule against shipping an unverifiable wire shape, the
+struct/routes/frontend were replaced (not extended) to match the
+actually-reachable device before any write path shipped. The old
+17-field evidence remains in `.plans/2026-09-17-alarm-output/DECISION_LOG.md`
+for history only.
+
+The device's own `en_US/js/pages/alarm_config.js` confirms
+`alarmconfig.html` reads all three settings in one call:
+```
+POST /get_configuration.fcgi {"alarm":[
+  "buzzer_enabled", "alarm_central_enabled", "playing_timeout"
+]}
+```
+Live-confirmed response shape (2026-09-20):
+```json
+{"alarm":{"buzzer_enabled":"1","alarm_central_enabled":"0","playing_timeout":"0"}}
+```
+`buzzer_enabled` and `alarm_central_enabled` (UI-labeled "Maximum
+Activation Time", not an obvious name match) are `"0"`/`"1"` strings;
+`playing_timeout` is a numeric string. `alarm_central_enabled` maps to
+`maxActivationTimeEnabled` and `playing_timeout` maps to
+`maxActivationTimeSeconds`.
+
+Save is a full-replace operation. The device's own UI always sends
+`playing_timeout` as literal `"0"` when the "Maximum Activation Time"
+checkbox is unchecked, regardless of whatever seconds value is still
+sitting in the (disabled) text field — the SDK's `setAlarmOutputSettings()`
+replicates this exact convention:
+```
+POST /set_configuration.fcgi {"alarm": {
+  "buzzer_enabled": "0"|"1",
+  "alarm_central_enabled": "0"|"1",
+  "playing_timeout": maxActivationTimeEnabled ? "<seconds>" : "0"
+}}
+```
+
+Live write+restore verification (2026-09-20, against 192.168.3.66):
+changed `maxActivationTimeEnabled` false→true and
+`maxActivationTimeSeconds` 0→15 via `PUT /alarm-output`, confirmed via
+both the backend's own `GET /alarm-output` and a direct DOM read of the
+live `alarmconfig.html` page (`playing_timeout_enabled` checkbox and
+`playing_timeout` text field) — exact match both times. Restored to
+the original values (`false`/`0`) the same way, confirmed restored by
+both methods again.
+
+| Method | Path | Device call |
+|---|---|---|
+| ✅ | `GET /alarm-output` | The three-field `get_configuration.fcgi` read above, mapped to typed camelCase JSON |
+| ✅ | `PUT /alarm-output` | Full-replace `set_configuration.fcgi` write above; requires `X-Confirm-Sensitive-Action: yes` |
+
+---
+
+## 11. 🔍 Discovery pending — remaining areas lack complete protocol evidence
 
 These sidebar areas exist on the real device but have **not** been
-statically or live read yet. Do not write endpoint specs for them
-until at least a static JS read (same method as every prior discovery
-pass) confirms the real object names/fields/commands.
+live-read yet. Do not write endpoint specs for them until at least a
+static JS read (same method as every prior discovery pass) confirms the
+real object names/fields/commands.
 
 | Sidebar area | Likely difficulty | Notes |
 |---|---|---|
-| Alarm Output (`alarmconfig.html`) | Medium | |
 | Data Tools → Import (`import.html`) | High — likely bulk write, needs care | |
-| Data Tools → Export (`export.html`) | Medium — likely reuses the `export_objects`/backup flow already seen referencing `portal_rules` etc. in the 48-command pass | |
+| Data Tools → Export (`export.html`) | Medium-High (scope varies wildly by flavor) | **JS_CONFIRMED for 3 of 4 flavors; LIVE_CONFIRMED for "Access Logs Only" (2026-09-20, against 192.168.3.66)**. Shared `en_US/js/pages/configurations.js` (backs every Settings/Data Tools modal, not a dedicated export.js). 4 distinct export flavors, all client-side-triggered from the same "Export" modal (`openExportModal()`), producing a browser download, not a server-generated file: (1) **Export Users** — `user_types`/`users`/`templates`/`face_templates`/`cards`/`user_roles`/`pins`/`qrcodes`/`visits` + custom tables, zipped with a `user_images/` folder (`users.zip`). (2) **Export Backup** — ~48 tables (groups, time_zones/time_spans, access_rules and all its join tables, reports/report_columns/report_filters, portal_rules and its join tables, api_logins/api_access_levels/api_commands, etc.) **plus** `alarm_logs`/`call_logs`/`access_logs` and their own join tables (`backup.zip`). (3) **Export Sync** — the same ~48-table list **minus** the log tables (`sync.zip`). (4) **Export Logs** — live-fired 2026-09-20 by selecting "Access Logs Only" and clicking Export: `POST /export_objects.fcgi` → HTTP 200, `content-type: text/comma-separated-values; charset=utf-8`, `content-disposition: attachment; filename="exported.csv"`. Real request body: `{"objects":[{"object":"access_logs"},{"object":"access_log_access_rules"},{"object":"access_log_portal_rules"},{"object":"_visitors","columns":["id","user_id"]},{"object":"c_users","columns":["id","user_id","cpf"]},{"object":"c_visits","columns":["id","visit_id"]}]}` — note this device's actual "Access Logs Only" flavor pulls 6 objects, not the 3 the static JS alone suggested (it also includes 2 custom-table objects `_visitors`/`c_users`/`c_visits` narrowed via a `columns` array — a device-specific custom-field/visitor extension present on this unit). Response body is a single multi-section plain-text/CSV document, not one CSV per table: a `cid_metadata` section giving each custom/extension table's schema (`column_name,default_value,type,constraint,unique,name,foreign_key_object,foreign_key_field` rows), then a `cid_data` section with one `<table_name>` header line followed by a normal CSV header+rows block per requested object, blank-line-separated, standard tables (`access_logs` etc.) skipping the metadata block. Confirms `export_objects` is the real, minimal, already-implementable command for a future "export access logs" feature; `columns` filtering and the metadata/data split are new details this device's build exposes and the old static read did not anticipate. New device commands found, none previously catalogued: `export_object` (`{object, columns}` → CSV text for one table), `export_objects` (`{objects: [{object, columns?}, ...]}` → the multi-section CSV above, used by Export Logs), `export_custom_tables_metadata` (no params → a CSV metadata header describing custom tables), `user_list_images` (→ `user_ids` with an image), `user_get_image_list` (`{user_ids}` → batched base64 image data, for the zip's `user_images/` folder). Export Users/Backup/Sync remain JS_CONFIRMED only — not live-tested. Also noted in passing: `export_face_templates`'s own paginated `load_objects` call uses `order: ['ascending', 'id']` — the `[direction, field]` shape, the OPPOSITE of the `[field, direction]` shape this project already confirmed correct elsewhere (`buildAccessLogsListBody`, the Reports plan's own Group 8 fix) — an unexplained inconsistency in the device's own JS, not yet resolved, irrelevant unless this specific command is ever implemented. **Only "Access Logs Only" has been live-tested — do not implement the other 3 flavors without a live confirm pass first**, per this project's own standing discovery discipline. |
 | Open relay / Open Door (sidebar direct-action buttons) | Low, risk-tier-wise — but a **real physical action** (unlocks a real door/relay) — see section 12, discovery complete 2026-09-16, plan in progress | |
 | Settings — other tiles (Network, Identification Methods, Facial Settings, and ~68 more per the "73 tiles" count noted in the Areas/Portals finding) | Varies | License Mode ✅ and Date and Time ✅ implemented; Operation Mode fixed ad-hoc (online/offline toggle only, no `GET`/`PUT` endpoint written) -- everything else still unopened |
 
@@ -1019,10 +1079,9 @@ least a discovery pass** — the entire sidebar area has been covered.
 **Recommended next single step:** Write the spec/plan for Custom
 Fields (section 10d) — full CRUD reusing the confirmed
 `object_add_field.fcgi`/`object_remove_fields.fcgi` sequence, following
-User Types' own established narrow-API precedent. Outside Enroll,
-Alarm Output and the Settings/Data Tools items in
-this section's own table are the next areas needing a first discovery
-pass.
+User Types' own established narrow-API precedent. Outside Enroll, the
+Settings/Data Tools items in this section's own table are the next
+areas needing a first discovery pass.
 
 Outside Enroll, section 7's other report variants (Access by Group/
 Time/User, Alarms Global, Users report) and section 8/9's Settings

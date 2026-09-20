@@ -95,6 +95,19 @@ struct RelayAction {
     int64_t secBoxId = 0;     // valid when kind == SecBox
 };
 
+/// Combined read/write of the device's Alarm Output settings, redesigned
+/// 2026-09-20 after the original device was returned to the factory (see
+/// DECISION_LOG.md). Full-replace write only, matching the device's own Save
+/// button which always resends all 3 fields together. Field names follow the
+/// device's own UI labels (Buzzer, Maximum Activation Time), not the sometimes-
+/// confusing raw device field names (`alarm_central_enabled` maps to Maximum
+/// Activation Time).
+struct AlarmOutputSettings {
+    bool buzzerEnabled = false;
+    bool maxActivationTimeEnabled = false;
+    int64_t maxActivationTimeSeconds = 0;
+};
+
 /// Combined read/write of the device's Internal Alarms settings
 /// (Internal Alarms settings plan, 2026-09-16). Full-replace write
 /// only (spec.md Decision 2) -- the device's own Save button always

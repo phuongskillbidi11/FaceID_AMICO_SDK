@@ -251,6 +251,56 @@ TEST_CASE("PUT /internal-alarms with the confirmation header succeeds") {
     CHECK(res->status == 200);
 }
 
+TEST_CASE("GET /alarm-output maps the alarm output settings response") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/get_configuration.fcgi") {
+            return FakeTransport::ok(nlohmann::json{{"alarm",
+                                                       {{"buzzer_enabled", "1"},
+                                                        {"alarm_central_enabled", "0"},
+                                                        {"playing_timeout", "45"}}}}
+                                          .dump());
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    auto res = cli.Get("/alarm-output");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+    nlohmann::json body = nlohmann::json::parse(res->body);
+    CHECK(body["buzzerEnabled"] == true);
+    CHECK(body["maxActivationTimeEnabled"] == false);
+    CHECK(body["maxActivationTimeSeconds"] == 45);
+}
+
+TEST_CASE("PUT /alarm-output without the confirmation header returns 428, never calls AmicoClient") {
+    TestServer server;
+    server.fake().responder = failIfCalled;
+    auto cli = server.http();
+    auto res = cli.Put("/alarm-output",
+                       R"({"buzzerEnabled":true,"maxActivationTimeEnabled":false,"maxActivationTimeSeconds":45})",
+                       "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 428);
+}
+
+TEST_CASE("PUT /alarm-output with the confirmation header succeeds") {
+    TestServer server;
+    server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
+        if (req.path == "/set_configuration.fcgi") {
+            return FakeTransport::ok("{}");
+        }
+        return FakeTransport::status(500, "{}");
+    };
+    auto cli = server.http();
+    httplib::Headers headers = {{"X-Confirm-Sensitive-Action", "yes"}};
+    auto res = cli.Put("/alarm-output", headers,
+                       R"({"buzzerEnabled":true,"maxActivationTimeEnabled":false,"maxActivationTimeSeconds":45})",
+                       "application/json");
+    REQUIRE(res != nullptr);
+    CHECK(res->status == 200);
+}
+
 TEST_CASE("GET /relay-actions lists currently-active door/sec_box actions") {
     TestServer server;
     server.fake().responder = [](const HttpRequest& req) -> HttpResponse {
@@ -1844,7 +1894,8 @@ TEST_CASE("POST /login invalid URL and network failure preserve session") {
 TEST_CASE("Every cookie gate rejects unauthorized requests before parsing or SDK calls") {
     const std::vector<std::pair<std::string, std::string>> routes = {
         {"GET", "/health"}, {"GET", "/system-information"}, {"GET", "/settings/date-time"}, {"GET", "/license"},
-        {"GET", "/internal-alarms"}, {"PUT", "/internal-alarms"}, {"GET", "/relay-actions"},
+        {"GET", "/internal-alarms"}, {"PUT", "/internal-alarms"},
+        {"GET", "/alarm-output"}, {"PUT", "/alarm-output"}, {"GET", "/relay-actions"},
         {"POST", "/relay-actions/door-1/trigger"}, {"GET", "/users?limit=bad"},
         {"GET", "/users/36"}, {"POST", "/users"}, {"PATCH", "/users/36"}, {"DELETE", "/users/36"},
         {"POST", "/users/36/groups/1"}, {"DELETE", "/users/36/groups/1"},

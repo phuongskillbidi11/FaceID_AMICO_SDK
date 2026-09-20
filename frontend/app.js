@@ -88,8 +88,8 @@ function activateTab(name) {
   document.querySelectorAll("nav [data-tab]").forEach(button => {
     const active = button.dataset.tab === name;
     button.setAttribute("aria-pressed", String(active));
-    document.getElementById(`tab-${button.dataset.tab}`).hidden = !active;
   });
+  document.querySelectorAll("#device-content > div").forEach(panel => { panel.hidden = panel.id !== `tab-${name}`; });
   // Allow direct-file shell verification without attempting backend requests.
   if (location.protocol !== "file:") document.dispatchEvent(new CustomEvent("tab-activated", { detail: name }));
 }
@@ -103,6 +103,9 @@ function setNavGroupExpanded(toggle, expanded) {
 document.getElementById("dismiss-error").addEventListener("click", hideError);
 document.querySelectorAll("nav [data-tab]").forEach(button => {
   button.addEventListener("click", () => activateTab(button.dataset.tab));
+});
+document.querySelectorAll("[data-settings-tab]").forEach(button => {
+  button.addEventListener("click", () => activateTab(button.dataset.settingsTab));
 });
 document.querySelectorAll(".nav-group-toggle").forEach(toggle => {
   toggle.addEventListener("click", () => {

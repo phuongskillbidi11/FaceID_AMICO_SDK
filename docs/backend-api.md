@@ -52,8 +52,9 @@ The following existing deployment and sensitive-action guardrails remain:
    backend provides none of these) in front of this server.**
 2. **Sensitive-action confirmation header.** `PUT
    /users/:id/administrator`, `PUT /users/:id/password`, `PUT
-   /internal-alarms`, and `POST /relay-actions/:id/trigger` all
-   require the request header `X-Confirm-Sensitive-Action: yes`.
+   /internal-alarms`, `PUT /alarm-output`, and `POST
+   /relay-actions/:id/trigger` all require the request header
+   `X-Confirm-Sensitive-Action: yes`.
    Without it, the request is rejected with `428 Precondition
    Required` after a valid session-cookie check, before the device is contacted. This only prevents
    *accidental* invocation (a buggy client, a mistyped `curl`) — a
@@ -322,6 +323,36 @@ the confirmation header, the route returns `428`. The SDK sends every
 field to the device as a JSON string in one `set_configuration.fcgi`
 call, matching the device's own all-or-nothing Save behavior. Success:
 `200 {"success": true}`. There is no partial-update route.
+
+### `GET /alarm-output`
+Returns the device's Alarm Output settings (Alarm Output plan,
+2026-09-17, redesigned 2026-09-20 against the actually-reachable
+device, live-verified). **Note:** this endpoint's shape was originally
+designed against a different physical unit's older "Relay and GPIOs"
+17-field configuration; that device was permanently retired and the
+route was redesigned around the current reachable device's real
+3-field `alarm_config.js` shape before ever shipping a write path.
+```json
+{
+  "buzzerEnabled": true,
+  "maxActivationTimeEnabled": false,
+  "maxActivationTimeSeconds": 0
+}
+```
+The device returns `buzzer_enabled`/`alarm_central_enabled` as
+`"0"`/`"1"` strings and `playing_timeout` as a numeric string; the
+backend converts all three.
+
+### `PUT /alarm-output` — 🔒 requires `X-Confirm-Sensitive-Action: yes`
+Full-replace write: the request body must contain all three fields in
+the same typed camelCase shape shown for `GET /alarm-output`. Missing
+or wrongly typed fields return `400 InvalidRequest`; without the
+confirmation header, the route returns `428`. The SDK always sends
+`playing_timeout` as literal `"0"` when `maxActivationTimeEnabled` is
+false, regardless of the `maxActivationTimeSeconds` value in the
+request body — this matches the device's own UI behavior. Success:
+`200 {"success": true}`. There is no partial-update route. Live
+write+restore verified 2026-09-20 against 192.168.3.66.
 
 ### `GET /relay-actions`
 Read-only list of the currently-active door/sec_box relay actions

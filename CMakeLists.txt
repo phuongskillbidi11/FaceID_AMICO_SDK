@@ -68,6 +68,7 @@ if(AMICO_BUILD_TESTS)
         test/test_reports.cpp
         test/test_relay_actions.cpp
         test/test_internal_alarms.cpp
+        test/test_alarm_output.cpp
         test/test_access_logs.cpp
         test/test_redaction.cpp
         test/test_query_whitelist.cpp

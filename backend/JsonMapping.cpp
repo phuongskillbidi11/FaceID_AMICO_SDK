@@ -132,6 +132,14 @@ amico::InternalAlarmSettings fromJsonInternalAlarmSettings(const nlohmann::json&
     return settings;
 }
 
+amico::AlarmOutputSettings fromJsonAlarmOutputSettings(const nlohmann::json& body) {
+    amico::AlarmOutputSettings settings;
+    settings.buzzerEnabled = body.at("buzzerEnabled").get<bool>();
+    settings.maxActivationTimeEnabled = body.at("maxActivationTimeEnabled").get<bool>();
+    settings.maxActivationTimeSeconds = body.at("maxActivationTimeSeconds").get<int64_t>();
+    return settings;
+}
+
 nlohmann::json toJson(const amico::RelayAction& action) {
     return {
         {"id", action.id},
@@ -139,6 +147,14 @@ nlohmann::json toJson(const amico::RelayAction& action) {
         {"label", action.label},
         {"relayNumber", action.relayNumber},
         {"secBoxId", action.secBoxId},
+    };
+}
+
+nlohmann::json toJson(const amico::AlarmOutputSettings& s) {
+    return {
+        {"buzzerEnabled", s.buzzerEnabled},
+        {"maxActivationTimeEnabled", s.maxActivationTimeEnabled},
+        {"maxActivationTimeSeconds", s.maxActivationTimeSeconds},
     };
 }
 

@@ -20,6 +20,7 @@
   <script defer src="system-info.js"></script>
   <script defer src="relay-actions.js"></script>
   <script defer src="internal-alarms.js"></script>
+  <script defer src="alarm-output.js"></script>
   <script defer src="login.js"></script>
 </head>
 <body>
@@ -66,6 +67,17 @@
         </div>
       </div>
       <div class="nav-group">
+        <button type="button" class="nav-group-toggle" id="alarms-toggle" aria-expanded="true" aria-controls="alarms-submenu">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg>
+          <span>Alarms</span>
+          <svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true" focusable="false"><path d="m6 9 6 6 6-6"/></svg>
+        </button>
+        <div class="nav-submenu" id="alarms-submenu">
+          <button type="button" data-tab="internal-alarms" aria-controls="tab-internal-alarms" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9M10 21h4"/></svg><span>Internal Alarms</span></button>
+          <button type="button" data-tab="alarm-output" aria-controls="tab-alarm-output" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M13 2 4 14h6l-1 8 9-12h-6l1-8Z"/></svg><span>Alarm Output</span></button>
+        </div>
+      </div>
+      <div class="nav-group">
         <button type="button" class="nav-group-toggle" id="reports-toggle" aria-expanded="true" aria-controls="reports-submenu">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="4" y="3" width="16" height="18" rx="2"/><path d="M8 8h8M8 12h8M8 16h5"/></svg>
           <span>Reports</span>
@@ -76,11 +88,18 @@
           <button type="button" data-tab="reports" aria-controls="tab-reports" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8Z"/><path d="M14 2v6h6"/><path d="M9 13h6M9 17h6"/></svg><span>Reports</span></button>
         </div>
       </div>
-      <button type="button" data-tab="system-info" aria-controls="tab-system-info" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg><span>System Information</span></button>
+      <div class="nav-group">
+        <button type="button" class="nav-group-toggle" id="settings-toggle" aria-expanded="true" aria-controls="settings-submenu"><span>⚙</span><span>Settings</span><svg class="nav-chevron" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m6 9 6 6 6-6"/></svg></button>
+        <div class="nav-submenu" id="settings-submenu">
+          <button type="button" data-tab="settings" aria-controls="tab-settings" aria-pressed="false"><span>Overview</span></button>
+        </div>
+      </div>
       <button type="button" data-tab="relay-actions" aria-controls="tab-relay-actions" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><rect x="3" y="11" width="18" height="10" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0"/></svg><span>Relay / Door Actions</span></button>
-      <button type="button" data-tab="internal-alarms" aria-controls="tab-internal-alarms" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" aria-hidden="true" focusable="false"><path d="M18 8a6 6 0 0 0-12 0c0 7-3 7-3 9h18c0-2-3-2-3-9"/><path d="M10 21h4"/></svg><span>Internal Alarms</span></button>
     </nav>
     <main id="device-content" hidden>
+      <div id="tab-settings" hidden><h2>Settings</h2><p class="settings-intro">Device configuration and diagnostics</p><div class="settings-cards">
+        <button class="settings-card" type="button" data-settings-tab="system-info"><span class="settings-card-icon"><svg viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9"/><path d="M12 11v6M12 7v1"/></svg></span><strong>System Information</strong></button>
+      </div></div>
       <div id="tab-users" hidden><h2>Users</h2></div>
       <div id="tab-visitors" hidden><h2>Visitors</h2></div>
       <div id="tab-visits" hidden><h2>Visits</h2></div>
@@ -95,6 +114,7 @@
       <div id="tab-system-info" hidden><h2>System Information</h2></div>
       <div id="tab-relay-actions" hidden><h2>Relay / Door Actions</h2></div>
       <div id="tab-internal-alarms" hidden><h2>Internal Alarms</h2></div>
+      <div id="tab-alarm-output" hidden><h2>Alarm Output</h2><p class="settings-intro">Buzzer and Maximum Activation Time</p></div>
     </main>
   </div>
 </body>

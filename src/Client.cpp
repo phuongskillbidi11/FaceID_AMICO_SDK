@@ -547,6 +547,33 @@ struct AmicoClient::Impl {
         return actions;
     }
 
+    AlarmOutputSettings getAlarmOutputSettings() {
+        const nlohmann::json body = {{"alarm", nlohmann::json::array({
+            "buzzer_enabled", "alarm_central_enabled", "playing_timeout"})}};
+        const auto response = postAuthenticatedJson("/get_configuration.fcgi", body);
+        const auto alarm = requireField<nlohmann::json>(response, "alarm", "/get_configuration.fcgi");
+        const std::string alarmPath = "/get_configuration.fcgi (alarm)";
+
+        AlarmOutputSettings settings;
+        settings.buzzerEnabled = requireStringBoolField(alarm, "buzzer_enabled", alarmPath);
+        settings.maxActivationTimeEnabled =
+            requireStringBoolField(alarm, "alarm_central_enabled", alarmPath);
+        settings.maxActivationTimeSeconds =
+            std::stoll(requireField<std::string>(alarm, "playing_timeout", alarmPath));
+        return settings;
+    }
+
+    void setAlarmOutputSettings(const AlarmOutputSettings& settings) {
+        const nlohmann::json body = {{"alarm", {
+            {"buzzer_enabled", settings.buzzerEnabled ? "1" : "0"},
+            {"alarm_central_enabled", settings.maxActivationTimeEnabled ? "1" : "0"},
+            {"playing_timeout", settings.maxActivationTimeEnabled
+                                    ? std::to_string(settings.maxActivationTimeSeconds)
+                                    : "0"},
+        }}};
+        postAuthenticatedJson("/set_configuration.fcgi", body);
+    }
+
     void triggerRelayAction(const std::string& id) {
         std::vector<RelayAction> actions = listRelayActions();
         auto it = std::find_if(actions.begin(), actions.end(), [&id](const RelayAction& a) { return a.id == id; });
@@ -2048,6 +2075,10 @@ void AmicoClient::setInternalAlarmSettingsImpl(const InternalAlarmSettings& sett
 }
 std::vector<RelayAction> AmicoClient::listRelayActions() { return listRelayActionsImpl(); }
 std::vector<RelayAction> AmicoClient::listRelayActionsImpl() { return impl_->listRelayActions(); }
+AlarmOutputSettings AmicoClient::getAlarmOutputSettings() { return getAlarmOutputSettingsImpl(); }
+AlarmOutputSettings AmicoClient::getAlarmOutputSettingsImpl() { return impl_->getAlarmOutputSettings(); }
+void AmicoClient::setAlarmOutputSettings(const AlarmOutputSettings& settings) { setAlarmOutputSettingsImpl(settings); }
+void AmicoClient::setAlarmOutputSettingsImpl(const AlarmOutputSettings& settings) { impl_->setAlarmOutputSettings(settings); }
 void AmicoClient::triggerRelayAction(const std::string& id) { triggerRelayActionImpl(id); }
 void AmicoClient::triggerRelayActionImpl(const std::string& id) { impl_->triggerRelayAction(id); }
 void AmicoClient::logout() { impl_->logout(); }

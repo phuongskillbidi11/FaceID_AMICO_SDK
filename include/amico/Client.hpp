@@ -81,6 +81,10 @@ public:
     /// from device configuration (Relay / Door actions plan,
     /// 2026-09-16).
     std::vector<RelayAction> listRelayActions();
+    AlarmOutputSettings getAlarmOutputSettings();
+    /// Full-replace write of Alarm Output settings. Changes real
+    /// security-relevant alarm behavior.
+    void setAlarmOutputSettings(const AlarmOutputSettings& settings);
 
     /// Fires one action by its `RelayAction::id` (re-resolved fresh --
     /// spec.md Decision 1). Throws ProtocolError if `id` doesn't match
@@ -504,6 +508,8 @@ private:
     InternalAlarmSettings getInternalAlarmSettingsImpl();
     void setInternalAlarmSettingsImpl(const InternalAlarmSettings& settings);
     std::vector<RelayAction> listRelayActionsImpl();
+    AlarmOutputSettings getAlarmOutputSettingsImpl();
+    void setAlarmOutputSettingsImpl(const AlarmOutputSettings& settings);
     void triggerRelayActionImpl(const std::string& id);
     std::vector<AmicoUser> listUsersImpl(const UserQuery& query);
     std::optional<AmicoUser> getUserImpl(int64_t id);

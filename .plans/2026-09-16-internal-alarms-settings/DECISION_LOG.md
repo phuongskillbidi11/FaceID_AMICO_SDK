@@ -199,3 +199,43 @@ or cookies were recorded.
 **Status:** Done.
 
 ---
+
+## 2026-09-20 — New device revealed a 10th field this SDK doesn't know about yet
+
+**Context:** The original device (`192.168.2.156`) this plan shipped
+against was returned to the factory. A different, older-generation
+unit (`192.168.3.66`, firmware `1.8.7`) is now the only reachable
+device. As part of a broader Alarm Output re-survey on this new unit,
+Internal Alarms was cross-checked for safety.
+
+**Finding:** This device's own `alarmint.html` requests a 10th field
+this plan's `InternalAlarmSettings`/`getInternalAlarmSettings()` never
+requests:
+```
+{"alarm":["door_sensor_enabled","door_sensor_delay","door_sensor_alarm_timeout_after_closure","forced_access_enabled","forced_access_debounce","device_violation_enabled","reset_on_violation_enabled","panic_finger_enabled","panic_card_enabled","panic_finger_delay"]}
+```
+`reset_on_violation_enabled` (a "0"/"1" string, same convention as
+every other boolean field here) sits between `device_violation_enabled`
+and `panic_finger_enabled` in the device's own field order. The
+already-shipped 9-field read/write **still functions correctly** on
+this device (requesting a subset of a device object's own fields is
+this project's own established, safe convention everywhere else) — this
+is a **completeness gap, not a break**: the new field is simply never
+read, shown, or written by this SDK today, so any change a
+hypothetical operator made to it via the device's own native UI would
+be silently left alone by this project's own `PUT /internal-alarms`
+(full-replace writes only resend the 9 fields this SDK already knows
+about).
+
+**Decision:** Not fixed in this entry — tracked as a small, separate
+follow-up task (add `resetOnViolationEnabled` to `InternalAlarmSettings`,
+its read/write, `toJson`/`fromJson`, the route, the frontend form, and
+tests), not bundled into the concurrent Alarm Output rework since it
+touches an unrelated, already-shipped-and-committed feature. Lower
+priority than Alarm Output (which is fully broken on this device, not
+just incomplete).
+
+**Decided by:** Planner observation during the Alarm Output re-survey.
+**Status:** Open — not yet scheduled.
+
+---

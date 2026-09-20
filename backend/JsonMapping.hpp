@@ -26,6 +26,7 @@ nlohmann::json toJson(const amico::DateTimeSettings& settings);
 nlohmann::json toJson(const amico::LicenseInfo& info);
 nlohmann::json toJson(const amico::InternalAlarmSettings& settings);
 nlohmann::json toJson(const amico::RelayAction& action);
+nlohmann::json toJson(const amico::AlarmOutputSettings& settings);
 nlohmann::json toJson(const amico::Visit& visit);
 nlohmann::json toJson(const amico::Holiday& holiday);
 nlohmann::json toJson(const amico::ScheduledUnlock& unlock);
@@ -39,6 +40,7 @@ nlohmann::json toJson(const amico::ReportFilter& filter);
 /// on malformed input -- callers (Routes) must catch these and map to
 /// 400, never letting them reach ErrorMapping's AmicoError table.
 amico::InternalAlarmSettings fromJsonInternalAlarmSettings(const nlohmann::json& body);
+amico::AlarmOutputSettings fromJsonAlarmOutputSettings(const nlohmann::json& body);
 amico::NewUser fromJsonNewUser(const nlohmann::json& body);
 amico::UserUpdate fromJsonUserUpdate(int64_t id, const nlohmann::json& body);
 amico::NewVisit fromJsonNewVisit(const nlohmann::json& body);
